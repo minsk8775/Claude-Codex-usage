@@ -1,0 +1,21 @@
+# Runtime output - contains personal usage data. Never commit.
+latest.json
+latest.json.tmp
+codex_latest.json
+codex_latest.json.tmp
+status.log
+error.log
+limit_cache.json
+out.txt
+err.txt
+
+# Local credential/CLI helpers, if any are added back
+.credentials.json
+*.local.*
+__pycache__/
+.venv/
+uv.lock
+
+# One-shot publishing helper - local convenience, not part of the project
+publish-local.ps1
+publish.cmd
