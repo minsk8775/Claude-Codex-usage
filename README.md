@@ -83,7 +83,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Move the widget | Drag anywhere except the buttons and the resize grip |
 | Resize | Drag the bottom-right grip, or `Ctrl` + mouse wheel |
 | Change view mode | Click `▾`, or right-click the notification icon |
-| Open the app | Double-click Claude's area → Claude app (or claude.ai if not installed); Codex's area → the running ChatGPT app (or the usage page if none is running) |
+| Open the app | Double-click Claude's area → the Claude app; Codex's area → the ChatGPT app. Installed apps are focused or launched (they are Store apps launched by AUMID); if an app is not installed its website opens instead |
 | Sync now | Click `↻` |
 | Hide / show | Click `×`, or left-click the notification icon |
 | Always on top on/off | Right-click the notification icon → `항상 위` |
@@ -107,6 +107,7 @@ shortly after it starts and relaunches itself if `claude_usage.pyw`,
 | `codex_usage.py` | Codex usage from local `~/.codex` session logs |
 | `install.py` / `install.cmd` | Shortcut creation / installation |
 | `uninstall.cmd` | Removes automatic startup and shortcuts |
+| `cleanup-legacy.cmd` | Stops and unregisters the older standalone widgets |
 | `assets/claude-usage.ico` | Widget icon |
 
 ### License
@@ -173,7 +174,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 위치 옮기기 | 버튼·크기 손잡이 제외한 아무 곳 드래그 |
 | 크기 조절 | 오른쪽 아래 손잡이 또는 `Ctrl` + 마우스 휠 |
 | 보기 모드 변경 | `▾` 클릭 또는 알림 아이콘 우클릭 |
-| 앱 열기 | 더블클릭 — Claude 쪽→Claude 앱(없으면 claude.ai), Codex 쪽→실행 중인 ChatGPT 앱(없으면 사용량 페이지) |
+| 앱 열기 | 더블클릭 — Claude 쪽→Claude 앱, Codex 쪽→ChatGPT 앱. 실행 중이면 포커스, 꺼져 있으면 실행(둘 다 Store 앱이라 AUMID로 띄움). 앱이 없을 때만 사이트로 |
 | 즉시 동기화 | `↻` |
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |
 | 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
@@ -191,6 +192,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | `codex_usage.py` | 로컬 `~/.codex` 세션 로그에서 Codex 사용량 읽기 |
 | `install.py` / `install.cmd` | 바로가기 생성 / 설치 |
 | `uninstall.cmd` | 자동 실행·바로가기 제거 |
+| `cleanup-legacy.cmd` | 옛 standalone 위젯 중지·등록 해제 |
 | `assets/claude-usage.ico` | 위젯 아이콘 |
 
 ### 라이선스

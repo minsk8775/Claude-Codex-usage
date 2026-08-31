@@ -51,6 +51,17 @@ WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
 UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py")
 
+# The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
+# a protected WindowsApps folder, so they cannot be launched by their exe path.
+# They launch by AppUserModelID via "explorer shell:AppsFolder\<AUMID>". Their
+# package family names are stable across versions.
+CLAUDE_AUMID = "Claude_pzs8sxrjxfjjc!Claude"
+CHATGPT_AUMID = "OpenAI.Codex_2p2nqsd0c76g0!App"
+CLAUDE_SITE = "https://claude.ai/new"
+CODEX_SITE = "https://chatgpt.com/codex/settings/usage"
+# Process image names of the desktop apps the watcher opens the widget for.
+WATCHED_APP_EXES = ("claude.exe", "chatgpt.exe")
+
 # The widget shows one page per source and flips between them with the on-screen
 # arrows. Each page reads its own latest.json and refreshes with its own script.
 # "connect" marks a source whose first sync may need an interactive login step
@@ -606,77 +617,82 @@ def claude_app_window():
     return found[0] if found else 0
 
 
-def claude_protocol_registered():
-    """True if the claude:// protocol is registered per-machine or per-user."""
+def focus_window(hwnd):
+    """Restore (if minimised) and bring a top-level window to the foreground."""
+    user32 = ctypes.windll.user32
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
+    user32.SetForegroundWindow(hwnd)
+
+
+def launch_aumid(aumid):
+    """Launch a Store/desktop app by its AppUserModelID via the shell."""
     try:
-        import winreg
-    except ImportError:
+        subprocess.Popen(
+            ["explorer.exe", "shell:AppsFolder\\" + aumid],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        return True
+    except OSError as error:
+        log_error("launch %s failed: %r" % (aumid, error))
         return False
-    # HKEY_CLASSES_ROOT merges HKLM\Software\Classes and HKCU\Software\Classes,
-    # so this catches the protocol wherever the installer put it.
-    for root, path in (
-        (winreg.HKEY_CLASSES_ROOT, r"claude\shell\open\command"),
-        (winreg.HKEY_CURRENT_USER, r"Software\Classes\claude\shell\open\command"),
-    ):
-        try:
-            with winreg.OpenKey(root, path):
-                return True
-        except OSError:
-            continue
-    return False
 
 
-def claude_app_exe():
-    """Locate the Claude desktop executable, including versioned app-* folders."""
-    base = Path(
-        os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")
-    ) / "AnthropicClaude"
-    direct = base / "claude.exe"
-    if direct.exists():
-        return direct
-    # Squirrel-style installs keep the real exe in app-<version>\claude.exe.
-    versioned = sorted(base.glob("app-*/claude.exe"))
-    return versioned[-1] if versioned else None
+def get_installed_aumids():
+    """Return the AppUserModelIDs of installed Start-menu apps (Store + desktop).
 
-
-def open_claude_app():
-    """Show the Claude desktop app, launching it when it is not running yet."""
+    Used to decide whether to launch an app or fall back to its website. Returns
+    an empty set on any failure, which callers treat as 'unknown' (try the app).
+    """
     try:
-        user32 = ctypes.windll.user32
-        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-        user32.IsIconic.argtypes = [wintypes.HWND]
-        hwnd = claude_app_window()
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-StartApps | Select-Object -ExpandProperty AppID",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=CREATE_NO_WINDOW,
+            timeout=20,
+            check=False,
+        )
+        return {line.strip() for line in (result.stdout or "").splitlines() if line.strip()}
+    except (OSError, subprocess.SubprocessError) as error:
+        log_error("Get-StartApps failed: %r" % error)
+        return set()
+
+
+def open_app_or_site(window_fn, aumid, site, installed):
+    """Bring up a desktop app: focus its running window, else launch it by
+    AUMID, else open its website. The site is used only when the app is known
+    not to be installed; if install state is unknown we still try the app.
+    """
+    try:
+        hwnd = window_fn()
         if hwnd:
-            user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
-            user32.SetForegroundWindow(hwnd)
+            focus_window(hwnd)
             return
-        exe = claude_app_exe()
-        if exe:
-            subprocess.Popen(
-                [str(exe)],
-                cwd=str(exe.parent),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=CREATE_NO_WINDOW,
-                close_fds=True,
-            )
+        if (not installed or aumid in installed) and launch_aumid(aumid):
             return
-        if claude_protocol_registered():
-            os.startfile("claude://")
-            return
-        os.startfile("https://claude.ai/new")
+        os.startfile(site)
     except Exception as error:
-        log_error("opening Claude failed: %r" % error)
-
-
-def open_codex_usage_page():
-    """Open the official Codex usage page in the default browser."""
-    try:
-        os.startfile("https://chatgpt.com/codex/settings/usage")
-    except Exception as error:
-        log_error("opening Codex usage page failed: %r" % error)
+        log_error("opening app failed: %r" % error)
+        try:
+            os.startfile(site)
+        except OSError:
+            pass
 
 
 def chatgpt_app_window():
@@ -715,31 +731,6 @@ def chatgpt_app_window():
     return 0
 
 
-def open_codex_target():
-    """Focus a running ChatGPT / ChatGPT Classic app (ChatGPT preferred);
-    when neither is running, fall back to the Codex usage page.
-    """
-    try:
-        user32 = ctypes.windll.user32
-        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-        user32.IsIconic.argtypes = [wintypes.HWND]
-        hwnd = chatgpt_app_window()
-        if hwnd:
-            user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
-            user32.SetForegroundWindow(hwnd)
-            return
-        open_codex_usage_page()
-    except Exception as error:
-        log_error("opening Codex target failed: %r" % error)
-        open_codex_usage_page()
-
-
-def open_source_target(key):
-    if key == "codex":
-        open_codex_target()
-    else:
-        open_claude_app()
 
 
 class UsageApp:
@@ -781,6 +772,7 @@ class UsageApp:
         mode = settings.get("mode", DEFAULT_MODE)
         self.mode = mode if mode in VIEW_MODES else DEFAULT_MODE
         self.on_top = bool(settings.get("on_top", True))
+        self.app_ids = set()  # installed app AUMIDs; filled in the background
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.title("Claude Codex Usage")
@@ -846,7 +838,13 @@ class UsageApp:
         self.root.after(100, self._poll_events)
         self.root.after(120000, self._scheduled_sync)
         self.root.after(5000, self._check_update)
+        threading.Thread(target=self._load_installed_apps, daemon=True).start()
         self.start_sync(False)
+
+    def _load_installed_apps(self):
+        # Cache which apps are installed so double-click can choose app vs site
+        # without running PowerShell on every click.
+        self.app_ids = get_installed_aumids()
 
     def run(self):
         try:
@@ -1337,11 +1335,21 @@ class UsageApp:
             return self.stack_regions[-1][0]
         return "claude"
 
+    def _open_source(self, key):
+        if key == "codex":
+            open_app_or_site(
+                chatgpt_app_window, CHATGPT_AUMID, CODEX_SITE, self.app_ids
+            )
+        else:
+            open_app_or_site(
+                claude_app_window, CLAUDE_AUMID, CLAUDE_SITE, self.app_ids
+            )
+
     def _on_double_click(self, event):
         if self._on_control(event.x, event.y):
             return
         self.dragging = False
-        open_source_target(self._double_click_target(event.y))
+        self._open_source(self._double_click_target(event.y))
 
     def _show_mode_menu(self):
         menu = tk.Menu(self.root, tearoff=0)
@@ -1479,12 +1487,14 @@ class PROCESSENTRY32W(ctypes.Structure):
     ]
 
 
-def claude_code_process_ids():
+def watched_app_process_ids():
+    """PIDs of the Claude and ChatGPT desktop apps (and Claude Code) currently
+    running. Matched by process image name so the widget can pop up when one of
+    them launches.
+    """
     kernel32 = ctypes.windll.kernel32
     kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.Process32FirstW.argtypes = [
         wintypes.HANDLE,
         ctypes.POINTER(PROCESSENTRY32W),
@@ -1492,12 +1502,6 @@ def claude_code_process_ids():
     kernel32.Process32NextW.argtypes = [
         wintypes.HANDLE,
         ctypes.POINTER(PROCESSENTRY32W),
-    ]
-    kernel32.QueryFullProcessImageNameW.argtypes = [
-        wintypes.HANDLE,
-        wintypes.DWORD,
-        wintypes.LPWSTR,
-        ctypes.POINTER(wintypes.DWORD),
     ]
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
@@ -1509,18 +1513,8 @@ def claude_code_process_ids():
     try:
         success = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while success:
-            if entry.szExeFile.lower() == "claude.exe":
-                handle = kernel32.OpenProcess(0x1000, False, entry.th32ProcessID)
-                if handle:
-                    try:
-                        size = wintypes.DWORD(32768)
-                        path = ctypes.create_unicode_buffer(size.value)
-                        if kernel32.QueryFullProcessImageNameW(
-                            handle, 0, path, ctypes.byref(size)
-                        ) and "\\windowsapps\\claude_" not in path.value.lower():
-                            result.add(int(entry.th32ProcessID))
-                    finally:
-                        kernel32.CloseHandle(handle)
+            if entry.szExeFile.lower() in WATCHED_APP_EXES:
+                result.add(int(entry.th32ProcessID))
             success = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
     finally:
         kernel32.CloseHandle(snapshot)
@@ -1548,7 +1542,7 @@ def run_watcher():
     known = set()
     try:
         while True:
-            current = claude_code_process_ids()
+            current = watched_app_process_ids()
             if any(process_id not in known for process_id in current) and AUTO_FILE.exists():
                 start_main()
             known = current

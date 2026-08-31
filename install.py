@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +16,47 @@ STATE_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local
 AUTO_FILE = STATE_DIR / "auto.enabled"
 PYTHONW_FILE = STATE_DIR / "pythonw.path"
 STARTUP = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\Startup"
+
+# Older standalone widgets to stop and unregister so only this combined app
+# starts with Windows. Ports: claude-pet main/watch and codex-usage main.
+LEGACY_CONTROL_PORTS = (47651, 47652, 47661)
+LEGACY_STARTUP_NAMES = ("Claude Usage Watcher.lnk", "Codex Usage.lnk")
+LEGACY_DESKTOP_NAMES = (
+    "Claude Usage.lnk",
+    "Claude Usage Toggle.lnk",
+    "Codex Usage.lnk",
+)
+
+
+def _send_exit(port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.sendto(b"exit", ("127.0.0.1", port))
+    except OSError:
+        pass
+
+
+def remove_legacy():
+    """Stop the older standalone widgets and remove their startup and desktop
+    shortcuts, so they no longer open on boot. Leaves this app's own shortcuts
+    and everyone's saved login/settings untouched. Returns what was removed.
+    """
+    for port in LEGACY_CONTROL_PORTS:
+        _send_exit(port)
+    try:
+        desktop = desktop_path()
+    except OSError:
+        desktop = Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
+    removed = []
+    for folder, names in ((STARTUP, LEGACY_STARTUP_NAMES), (desktop, LEGACY_DESKTOP_NAMES)):
+        for name in names:
+            target = folder / name
+            try:
+                target.unlink()
+                removed.append(str(target))
+            except (FileNotFoundError, OSError):
+                pass
+    return removed
 
 
 def ensure_pywin32():
@@ -121,9 +163,17 @@ def start(pythonw, *arguments):
 
 
 def main():
+    if "--cleanup-only" in sys.argv:
+        removed = remove_legacy()
+        for path in removed:
+            print("Removed legacy:", path)
+        print("Legacy cleanup complete." if removed else "No legacy shortcuts found.")
+        return
     ensure_pywin32()
     pythonw = managed_pythonw()
     stop_legacy_processes()
+    for path in remove_legacy():
+        print("Removed legacy:", path)
     desktop = desktop_path()
     desktop_link = desktop / "Claude Codex Usage.lnk"
     legacy_link = desktop / "Claude Codex Usage Toggle.lnk"
