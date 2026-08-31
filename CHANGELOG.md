@@ -9,6 +9,12 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 트레이(작업표시줄 알림) 우클릭 메뉴에 **"항상 위 (Always on top)"** 토글 추가.
   끄면 일반 창처럼 다른 창 뒤로 내려갈 수 있고, 설정은 저장됩니다.
 
+### Changed
+- Codex 쪽 더블클릭이 사용량 페이지 대신 **실행 중인 ChatGPT 앱**을 엽니다.
+  ChatGPT와 ChatGPT Classic이 모두 켜져 있으면 ChatGPT를 우선하며, 둘 다 실행
+  중이 아니면 사용량 페이지로 폴백합니다. (Claude 쪽은 설치돼 있으면 Claude 앱,
+  없으면 claude.ai — 기존과 동일)
+
 ## [0.1.0] - 2026-08-31
 
 최초 버전. `claude-usage`와 `codex-usage`를 하나의 위젯으로 합친 통합형입니다.

@@ -662,9 +662,65 @@ def open_codex_usage_page():
         log_error("opening Codex usage page failed: %r" % error)
 
 
+def chatgpt_app_window():
+    """Return a running ChatGPT desktop app window, preferring the normal
+    ChatGPT app over ChatGPT Classic when both are open. Matches on the process
+    image name (e.g. ChatGPT.exe) so a browser tab titled 'ChatGPT' is ignored.
+    Returns 0 when no ChatGPT app is running.
+    """
+    user32 = ctypes.windll.user32
+    user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+    user32.GetWindowThreadProcessId.argtypes = [
+        wintypes.HWND,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    normal = []
+    classic = []
+
+    @WNDENUMPROC
+    def visit(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd) or user32.GetWindowTextLengthW(hwnd) <= 0:
+            return True
+        process_id = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        image = process_image_name(process_id.value).lower()
+        if "chatgpt" in image:
+            (classic if "classic" in image else normal).append(hwnd)
+        return True
+
+    user32.EnumWindows(visit, 0)
+    if normal:
+        return normal[0]
+    if classic:
+        return classic[0]
+    return 0
+
+
+def open_codex_target():
+    """Focus a running ChatGPT / ChatGPT Classic app (ChatGPT preferred);
+    when neither is running, fall back to the Codex usage page.
+    """
+    try:
+        user32 = ctypes.windll.user32
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user32.IsIconic.argtypes = [wintypes.HWND]
+        hwnd = chatgpt_app_window()
+        if hwnd:
+            user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
+            user32.SetForegroundWindow(hwnd)
+            return
+        open_codex_usage_page()
+    except Exception as error:
+        log_error("opening Codex target failed: %r" % error)
+        open_codex_usage_page()
+
+
 def open_source_target(key):
     if key == "codex":
-        open_codex_usage_page()
+        open_codex_target()
     else:
         open_claude_app()
 
