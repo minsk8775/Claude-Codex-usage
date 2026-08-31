@@ -607,15 +607,36 @@ def claude_app_window():
 
 
 def claude_protocol_registered():
+    """True if the claude:// protocol is registered per-machine or per-user."""
     try:
         import winreg
-
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, r"Software\Classes\claude\shell\open\command"
-        ):
-            return True
-    except (OSError, ImportError):
+    except ImportError:
         return False
+    # HKEY_CLASSES_ROOT merges HKLM\Software\Classes and HKCU\Software\Classes,
+    # so this catches the protocol wherever the installer put it.
+    for root, path in (
+        (winreg.HKEY_CLASSES_ROOT, r"claude\shell\open\command"),
+        (winreg.HKEY_CURRENT_USER, r"Software\Classes\claude\shell\open\command"),
+    ):
+        try:
+            with winreg.OpenKey(root, path):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def claude_app_exe():
+    """Locate the Claude desktop executable, including versioned app-* folders."""
+    base = Path(
+        os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")
+    ) / "AnthropicClaude"
+    direct = base / "claude.exe"
+    if direct.exists():
+        return direct
+    # Squirrel-style installs keep the real exe in app-<version>\claude.exe.
+    versioned = sorted(base.glob("app-*/claude.exe"))
+    return versioned[-1] if versioned else None
 
 
 def open_claude_app():
@@ -630,24 +651,20 @@ def open_claude_app():
             user32.ShowWindow(hwnd, 9 if user32.IsIconic(hwnd) else 5)
             user32.SetForegroundWindow(hwnd)
             return
-        if claude_protocol_registered():
-            os.startfile("claude://")
-            return
-        fallback = (
-            Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-            / "AnthropicClaude"
-            / "claude.exe"
-        )
-        if fallback.exists():
+        exe = claude_app_exe()
+        if exe:
             subprocess.Popen(
-                [str(fallback)],
-                cwd=str(fallback.parent),
+                [str(exe)],
+                cwd=str(exe.parent),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=CREATE_NO_WINDOW,
                 close_fds=True,
             )
+            return
+        if claude_protocol_registered():
+            os.startfile("claude://")
             return
         os.startfile("https://claude.ai/new")
     except Exception as error:
