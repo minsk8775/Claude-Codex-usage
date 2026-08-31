@@ -3,6 +3,12 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.2.0] - 2026-08-31
+
+### Added
+- 트레이(작업표시줄 알림) 우클릭 메뉴에 **"항상 위 (Always on top)"** 토글 추가.
+  끄면 일반 창처럼 다른 창 뒤로 내려갈 수 있고, 설정은 저장됩니다.
+
 ## [0.1.0] - 2026-08-31
 
 최초 버전. `claude-usage`와 `codex-usage`를 하나의 위젯으로 합친 통합형입니다.
@@ -18,4 +24,5 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.2.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.1.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

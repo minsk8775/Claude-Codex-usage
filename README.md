@@ -86,6 +86,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Open the app | Double-click Claude's area → Claude app; Codex's area → Codex usage page |
 | Sync now | Click `↻` |
 | Hide / show | Click `×`, or left-click the notification icon |
+| Always on top on/off | Right-click the notification icon → `항상 위` |
 | Exit | Right-click the notification icon → `Exit` |
 
 Percent is **used** (the bar fills as you consume quota). A moved widget keeps
@@ -175,6 +176,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 앱 열기 | 더블클릭 — Claude 쪽→Claude 앱, Codex 쪽→Codex 사용량 페이지 |
 | 즉시 동기화 | `↻` |
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |
+| 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
 | 완전 종료 | 알림 아이콘 우클릭 → `Exit` |
 
 퍼센트는 **사용량 기준**(쓸수록 막대가 참)입니다. 창을 옮겨 둔 경우, 모드에 따라

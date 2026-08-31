@@ -270,6 +270,8 @@ class TrayIcon:
     MF_STRING = 0x0000
     MF_SEPARATOR = 0x0800
     MF_BYCOMMAND = 0x0000
+    MF_CHECKED = 0x0008
+    MF_UNCHECKED = 0x0000
     TPM_RIGHTBUTTON = 0x0002
     TPM_RETURNCMD = 0x0100
     HWND_MESSAGE = -3
@@ -281,6 +283,7 @@ class TrayIcon:
         self.data = None
         self.callback = None
         self.current_mode = DEFAULT_MODE
+        self.current_on_top = True
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
@@ -323,6 +326,14 @@ class TrayIcon:
             menu, MODE_MENU[0][0], MODE_MENU[-1][0], checked, self.MF_BYCOMMAND
         )
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
+        user32.AppendMenuW(menu, self.MF_STRING, 1003, "항상 위 (Always on top)")
+        user32.CheckMenuItem(
+            menu,
+            1003,
+            self.MF_BYCOMMAND
+            | (self.MF_CHECKED if self.current_on_top else self.MF_UNCHECKED),
+        )
+        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, 1001, "Show / Hide")
         user32.AppendMenuW(menu, self.MF_STRING, 1002, "Exit")
         point = POINT()
@@ -343,6 +354,8 @@ class TrayIcon:
             self.events.put(("toggle", None))
         elif command == 1002:
             self.events.put(("exit", None))
+        elif command == 1003:
+            self.events.put(("toggle_ontop", None))
         elif command in MODE_BY_ID:
             self.events.put(("mode", MODE_BY_ID[command]))
 
@@ -694,11 +707,12 @@ class UsageApp:
             self.page = 0
         mode = settings.get("mode", DEFAULT_MODE)
         self.mode = mode if mode in VIEW_MODES else DEFAULT_MODE
+        self.on_top = bool(settings.get("on_top", True))
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.title("Claude Codex Usage")
         self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
+        self.root.attributes("-topmost", self.on_top)
         # Slightly translucent so the desktop shows through but text stays clear.
         self.root.attributes("-alpha", 0.85)
         try:
@@ -752,6 +766,7 @@ class UsageApp:
 
         self.tray = TrayIcon(self.events)
         self.tray.current_mode = self.mode
+        self.tray.current_on_top = self.on_top
         self.tray.start()
         self.listener = threading.Thread(target=self._listen, daemon=True)
         self.listener.start()
@@ -799,6 +814,8 @@ class UsageApp:
                 self.restart()
             elif action == "mode":
                 self._set_mode(payload)
+            elif action == "toggle_ontop":
+                self._toggle_on_top()
             elif action == "sync_result":
                 key, data = payload
                 self.datas[key] = data
@@ -894,6 +911,17 @@ class UsageApp:
         self._place()
         self.start_sync(False)
 
+    def _toggle_on_top(self):
+        self.on_top = not self.on_top
+        self.tray.current_on_top = self.on_top
+        try:
+            self.root.attributes("-topmost", self.on_top)
+        except tk.TclError:
+            pass
+        if self.on_top:
+            self.root.lift()
+        self._save_settings()
+
     def _load_latest(self, source=None):
         source = source or self._source()
         try:
@@ -923,6 +951,7 @@ class UsageApp:
                         "scale": round(self.scale, 3),
                         "page": self.page,
                         "mode": self.mode,
+                        "on_top": self.on_top,
                     }
                 ),
                 encoding="utf-8",
@@ -1326,7 +1355,7 @@ class UsageApp:
     def show(self):
         self.root.deiconify()
         self.root.lift()
-        self.root.attributes("-topmost", True)
+        self.root.attributes("-topmost", self.on_top)
 
     def hide(self):
         self.root.withdraw()
