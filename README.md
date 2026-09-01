@@ -30,13 +30,16 @@ Pick a mode from the **`▾` button** (between `↻` and `×`), by **right-click
 anywhere on the widget**, or from the notification-area icon:
 
 - **자동 (auto)** — follow the running apps: only Claude open → Claude only,
-  only ChatGPT open → Codex only, both open → both stacked (default)
+  only ChatGPT open → Codex only, both open → both stacked (default). When both
+  apps are closed the window hides itself, and it comes back when either app
+  opens again.
 - **둘 다 보기 (both, stacked)** — Claude and Codex in one window
 - **둘 다 (좌우 전환)** — one at a time, flip with the `‹ ›` arrows
 - **Claude만** — Claude only
 - **Codex만** — Codex only
 
-The widget also pops up on its own when the Claude or ChatGPT desktop app starts.
+In auto mode the widget appears and hides on its own with the apps; a running
+background watcher also opens it when an app starts even if the widget was closed.
 
 ---
 

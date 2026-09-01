@@ -824,8 +824,12 @@ class UsageApp:
         self.bottom_anchor = None
         self.mode_var = tk.StringVar(master=self.root, value=self.mode)
         self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
+        try:
+            self._known_app_keys = running_app_keys()
+        except Exception:
+            self._known_app_keys = set()
         if self.mode == "auto":
-            self.auto_view = self._desired_auto_view()
+            self.auto_view = self._auto_view_for(self._known_app_keys)
         # Keep self.data aligned with the (possibly auto-chosen) single source.
         self.data = self.datas.get(self._source()["key"], self.data)
 
@@ -840,7 +844,12 @@ class UsageApp:
         self.root.update_idletasks()
         self._hide_from_taskbar()
         self._place()
-        self.show()
+        # In auto mode with no watched app running, start hidden; the widget
+        # reappears when Claude or ChatGPT opens.
+        if self.mode == "auto" and not self._known_app_keys:
+            self.root.withdraw()
+        else:
+            self.show()
 
         self.tray = TrayIcon(self.events)
         self.tray.current_mode = self.mode
@@ -865,11 +874,7 @@ class UsageApp:
         except Exception:
             keys = set()
         if self.mode == "auto":
-            view = (
-                "claude" if keys == {"claude"}
-                else "codex" if keys == {"codex"}
-                else "both_stacked"
-            )
+            view = self._auto_view_for(keys)
             if view != self.auto_view:
                 self.auto_view = view
                 if not self._stacked():
@@ -879,7 +884,13 @@ class UsageApp:
                 self._draw()
                 self._place()
                 self.start_sync(False)
-        if (keys - self._known_app_keys) and self.root.state() == "withdrawn":
+            # The window follows the apps: it appears when one is running and
+            # hides when both are closed; reopening an app brings it back.
+            if keys and self.root.state() == "withdrawn":
+                self.show()
+            elif not keys and self.root.state() != "withdrawn":
+                self.hide()
+        elif (keys - self._known_app_keys) and self.root.state() == "withdrawn":
             self.show()
         self._known_app_keys = keys
         if not self.exiting:
@@ -1014,17 +1025,21 @@ class UsageApp:
     def _paged(self):
         return self._effective_mode() == "both_paged"
 
+    @staticmethod
+    def _auto_view_for(keys):
+        if keys == {"claude"}:
+            return "claude"
+        if keys == {"codex"}:
+            return "codex"
+        return "both_stacked"
+
     def _desired_auto_view(self):
         """Auto view based on which desktop apps are running."""
         try:
             keys = running_app_keys()
         except Exception:
             keys = set()
-        if keys == {"claude"}:
-            return "claude"
-        if keys == {"codex"}:
-            return "codex"
-        return "both_stacked"
+        return self._auto_view_for(keys)
 
     def _visible_sources(self):
         if self._stacked():
