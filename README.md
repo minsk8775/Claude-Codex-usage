@@ -26,13 +26,17 @@ with four view modes.
 
 ## View modes
 
-Pick a mode from the **`▾` button** (between `↻` and `×`) or by right-clicking
-the notification-area icon:
+Pick a mode from the **`▾` button** (between `↻` and `×`), by **right-clicking
+anywhere on the widget**, or from the notification-area icon:
 
-- **둘 다 보기 (both, stacked)** — Claude and Codex in one window (default)
+- **자동 (auto)** — follow the running apps: only Claude open → Claude only,
+  only ChatGPT open → Codex only, both open → both stacked (default)
+- **둘 다 보기 (both, stacked)** — Claude and Codex in one window
 - **둘 다 (좌우 전환)** — one at a time, flip with the `‹ ›` arrows
 - **Claude만** — Claude only
 - **Codex만** — Codex only
+
+The widget also pops up on its own when the Claude or ChatGPT desktop app starts.
 
 ---
 
@@ -82,7 +86,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | --- | --- |
 | Move the widget | Drag anywhere except the buttons and the resize grip |
 | Resize | Drag the bottom-right grip, or `Ctrl` + mouse wheel |
-| Change view mode | Click `▾`, or right-click the notification icon |
+| Change view mode | Click `▾`, right-click anywhere on the widget, or right-click the notification icon |
 | Open the app | Double-click Claude's area → the Claude app; Codex's area → the ChatGPT app. Installed apps are focused or launched (they are Store apps launched by AUMID); if an app is not installed its website opens instead |
 | Sync now | Click `↻` |
 | Hide / show | Click `×`, or left-click the notification icon |
@@ -173,7 +177,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | --- | --- |
 | 위치 옮기기 | 버튼·크기 손잡이 제외한 아무 곳 드래그 |
 | 크기 조절 | 오른쪽 아래 손잡이 또는 `Ctrl` + 마우스 휠 |
-| 보기 모드 변경 | `▾` 클릭 또는 알림 아이콘 우클릭 |
+| 보기 모드 변경 | `▾` 클릭, **창 아무 곳 우클릭**, 또는 알림 아이콘 우클릭 |
 | 앱 열기 | 더블클릭 — Claude 쪽→Claude 앱, Codex 쪽→ChatGPT 앱. 실행 중이면 포커스, 꺼져 있으면 실행(둘 다 Store 앱이라 AUMID로 띄움). 앱이 없을 때만 사이트로 |
 | 즉시 동기화 | `↻` |
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |

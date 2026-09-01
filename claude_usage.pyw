@@ -85,20 +85,25 @@ SOURCES = (
 SOURCE_BY_KEY = {source["key"]: source for source in SOURCES}
 
 # View modes, chosen from the notification-icon right-click menu:
-#   both_stacked - both sources at once, stacked in one window (default)
+#   auto         - follow which apps are running: one open -> that one only,
+#                  both open -> both stacked (default)
+#   both_stacked - both sources at once, stacked in one window
 #   both_paged   - both sources, one per page, flipped with the on-screen arrows
 #   claude       - Claude only
 #   codex        - Codex only
-VIEW_MODES = ("both_stacked", "both_paged", "claude", "codex")
-DEFAULT_MODE = "both_stacked"
+VIEW_MODES = ("auto", "both_stacked", "both_paged", "claude", "codex")
+DEFAULT_MODE = "auto"
 # (menu id, mode key, label) rendered in the tray menu, in this order.
 MODE_MENU = (
+    (2000, "auto", "자동 (앱에 맞춰)"),
     (2001, "claude", "Claude만 보기"),
     (2002, "codex", "Codex만 보기"),
     (2003, "both_stacked", "둘 다 보기"),
     (2004, "both_paged", "둘 다 (좌우 전환)"),
 )
 MODE_BY_ID = {menu_id: mode for menu_id, mode, _label in MODE_MENU}
+# Desktop-app process image name -> usage source key, for the auto view.
+APP_KEY_BY_EXE = {"claude.exe": "claude", "chatgpt.exe": "codex"}
 
 
 def log_error(value):
@@ -773,6 +778,8 @@ class UsageApp:
         self.mode = mode if mode in VIEW_MODES else DEFAULT_MODE
         self.on_top = bool(settings.get("on_top", True))
         self.app_ids = set()  # installed app AUMIDs; filled in the background
+        self.auto_view = "both_stacked"  # effective view when mode == "auto"
+        self._known_app_keys = set()
         self.root = tk.Tk()
         self.root.withdraw()
         self.root.title("Claude Codex Usage")
@@ -816,11 +823,17 @@ class UsageApp:
         self.stack_regions = []
         self.bottom_anchor = None
         self.mode_var = tk.StringVar(master=self.root, value=self.mode)
+        self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
+        if self.mode == "auto":
+            self.auto_view = self._desired_auto_view()
+        # Keep self.data aligned with the (possibly auto-chosen) single source.
+        self.data = self.datas.get(self._source()["key"], self.data)
 
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
         self.canvas.bind("<Double-Button-1>", self._on_double_click)
+        self.canvas.bind("<Button-3>", self._on_right_click)
         self.canvas.bind("<Control-MouseWheel>", self._on_wheel)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self._draw()
@@ -838,8 +851,39 @@ class UsageApp:
         self.root.after(100, self._poll_events)
         self.root.after(120000, self._scheduled_sync)
         self.root.after(5000, self._check_update)
+        self.root.after(1500, self._auto_tick)
         threading.Thread(target=self._load_installed_apps, daemon=True).start()
         self.start_sync(False)
+
+    def _auto_tick(self):
+        """Follow running apps: switch the auto view, and reveal a hidden widget
+        when a watched app has just launched."""
+        if self.exiting:
+            return
+        try:
+            keys = running_app_keys()
+        except Exception:
+            keys = set()
+        if self.mode == "auto":
+            view = (
+                "claude" if keys == {"claude"}
+                else "codex" if keys == {"codex"}
+                else "both_stacked"
+            )
+            if view != self.auto_view:
+                self.auto_view = view
+                if not self._stacked():
+                    self.data = self.datas.get(self._source()["key"]) or {
+                        "error": "사용량 동기화 중..."
+                    }
+                self._draw()
+                self._place()
+                self.start_sync(False)
+        if (keys - self._known_app_keys) and self.root.state() == "withdrawn":
+            self.show()
+        self._known_app_keys = keys
+        if not self.exiting:
+            self.root.after(3000, self._auto_tick)
 
     def _load_installed_apps(self):
         # Cache which apps are installed so double-click can choose app vs site
@@ -949,19 +993,38 @@ class UsageApp:
                 )
         self.events.put(("sync_done", None))
 
+    def _effective_mode(self):
+        """The concrete view in effect. In auto mode it follows running apps."""
+        if self.mode == "auto":
+            return self.auto_view
+        return self.mode
+
     def _source(self):
         """The single source shown in claude / codex / both_paged modes."""
-        if self.mode == "claude":
+        mode = self._effective_mode()
+        if mode == "claude":
             return SOURCE_BY_KEY["claude"]
-        if self.mode == "codex":
+        if mode == "codex":
             return SOURCE_BY_KEY["codex"]
         return SOURCES[self.page]
 
     def _stacked(self):
-        return self.mode == "both_stacked"
+        return self._effective_mode() == "both_stacked"
 
     def _paged(self):
-        return self.mode == "both_paged"
+        return self._effective_mode() == "both_paged"
+
+    def _desired_auto_view(self):
+        """Auto view based on which desktop apps are running."""
+        try:
+            keys = running_app_keys()
+        except Exception:
+            keys = set()
+        if keys == {"claude"}:
+            return "claude"
+        if keys == {"codex"}:
+            return "codex"
+        return "both_stacked"
 
     def _visible_sources(self):
         if self._stacked():
@@ -973,6 +1036,8 @@ class UsageApp:
             return
         self.mode = mode
         self.tray.current_mode = mode
+        if mode == "auto":
+            self.auto_view = self._desired_auto_view()
         if not self._stacked():
             self.data = self.datas.get(self._source()["key"]) or {
                 "error": "사용량 동기화 중..."
@@ -985,6 +1050,7 @@ class UsageApp:
     def _toggle_on_top(self):
         self.on_top = not self.on_top
         self.tray.current_on_top = self.on_top
+        self.on_top_var.set(self.on_top)
         try:
             self.root.attributes("-topmost", self.on_top)
         except tk.TclError:
@@ -1310,7 +1376,10 @@ class UsageApp:
             self.start_sync(True)
             return
         if self._contains(self.hit_mode, event.x, event.y):
-            self._show_mode_menu()
+            self._show_context_menu(
+                self.root.winfo_rootx() + (self.hit_mode[0] + self.hit_mode[2]) / 2,
+                self.root.winfo_rooty() + self.hit_mode[3],
+            )
             return
         if self._contains(self.hit_close, event.x, event.y):
             self.hide()
@@ -1321,9 +1390,10 @@ class UsageApp:
 
     def _double_click_target(self, y):
         """Which source a double-click opens, given the click's y position."""
-        if self.mode == "claude":
+        mode = self._effective_mode()
+        if mode == "claude":
             return "claude"
-        if self.mode == "codex":
+        if mode == "codex":
             return "codex"
         if self._paged():
             return self._source()["key"]
@@ -1351,7 +1421,9 @@ class UsageApp:
         self.dragging = False
         self._open_source(self._double_click_target(event.y))
 
-    def _show_mode_menu(self):
+    def _show_context_menu(self, x=None, y=None):
+        """The same menu the notification-area icon shows: view modes, always on
+        top, show/hide, exit."""
         menu = tk.Menu(self.root, tearoff=0)
         self.mode_var.set(self.mode)
         for _menu_id, key, label in MODE_MENU:
@@ -1361,12 +1433,26 @@ class UsageApp:
                 variable=self.mode_var,
                 command=lambda k=key: self._set_mode(k),
             )
-        x = self.root.winfo_rootx() + int((self.hit_mode[0] + self.hit_mode[2]) / 2)
-        y = self.root.winfo_rooty() + int(self.hit_mode[3])
+        menu.add_separator()
+        self.on_top_var.set(self.on_top)
+        menu.add_checkbutton(
+            label="항상 위 (Always on top)",
+            variable=self.on_top_var,
+            command=self._toggle_on_top,
+        )
+        menu.add_separator()
+        menu.add_command(label="Show / Hide", command=self.toggle)
+        menu.add_command(label="Exit", command=self.exit)
+        if x is None:
+            x = self.root.winfo_pointerx()
+            y = self.root.winfo_pointery()
         try:
-            menu.tk_popup(x, y)
+            menu.tk_popup(int(x), int(y))
         finally:
             menu.grab_release()
+
+    def _on_right_click(self, _event):
+        self._show_context_menu()
 
     def _on_drag(self, event):
         if self.resizing:
@@ -1519,6 +1605,35 @@ def watched_app_process_ids():
     finally:
         kernel32.CloseHandle(snapshot)
     return result
+
+
+def running_app_keys():
+    """Return the source keys ('claude'/'codex') whose desktop app is running.
+
+    Used by the auto view to show only the app(s) currently open.
+    """
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+    if snapshot == wintypes.HANDLE(-1).value:
+        return set()
+    keys = set()
+    entry = PROCESSENTRY32W()
+    entry.dwSize = ctypes.sizeof(entry)
+    try:
+        success = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while success:
+            key = APP_KEY_BY_EXE.get(entry.szExeFile.lower())
+            if key:
+                keys.add(key)
+            success = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return keys
 
 
 def start_main():

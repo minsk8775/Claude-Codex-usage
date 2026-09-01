@@ -3,6 +3,21 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.4.0] - 2026-09-01
+
+### Added
+- **자동 보기 모드**(새 기본값): 실행 중인 앱에 맞춰 뷰가 바뀝니다. Claude만
+  켜져 있으면 Claude 사용량만, Codex(ChatGPT)만 켜져 있으면 Codex만, 둘 다 켜져
+  있으면 둘 다(세로) 보기로 자동 전환. 물론 트레이/`▾`/우클릭 메뉴에서 특정
+  모드로 고정할 수도 있습니다.
+- **창 어디서나 우클릭** 시 트레이(작업표시줄) 우클릭과 동일한 메뉴(보기 모드 ·
+  항상 위 · 표시/숨김 · 종료)가 나옵니다.
+
+### Changed
+- 백그라운드 감시자가 Claude 또는 ChatGPT 데스크톱 앱 실행을 감지하면 위젯을
+  띄웁니다. 감시자는 별도 프로세스라, 이 버전을 적용하려면 **`install.cmd`를 다시
+  실행**하거나 재부팅해 최신 감시자로 교체해야 합니다.
+
 ## [0.3.0] - 2026-08-31
 
 ### Added
@@ -44,6 +59,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.4.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.3.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.2.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.1.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
