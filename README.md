@@ -24,6 +24,12 @@ with four view modes.
 └──────────────────────────┘
 ```
 
+![Claude Codex Usage widget in Korean and English, with the update badge and the right-click view-mode / Language menu](assets/screenshot.svg)
+
+The combined widget (both stacked) in Korean and English, showing the
+`● 업데이트 필요 / ● Update available` badge and the right-click menu (view modes +
+**Language**).
+
 ## View modes
 
 Pick a mode from the **`▾` button** (between `↻` and `×`), by **right-clicking
