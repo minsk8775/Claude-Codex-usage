@@ -57,9 +57,12 @@ executing freshly pulled code would be the highest-impact path, so it was remove
 `usage.py` drives a Chrome/Edge instance over the DevTools protocol on a random
 loopback port. It passes `--remote-allow-origins=http://localhost`, so only this
 app's local client can attach — a malicious web page cannot reach the debug port
-(including via DNS-rebinding). The browser is shut down after each sync so the port
-is not left listening between refreshes. No `--disable-web-security`,
-`--load-extension`, or `--remote-debugging-address` override is used.
+(including via DNS-rebinding). The origin restriction, not closing the browser, is
+what secures the port: the hidden background browser is deliberately kept running
+between syncs so it holds the signed-in Claude session (killing it after every
+sync would drop the login), and it is stopped when the widget exits. No
+`--disable-web-security`, `--load-extension`, or `--remote-debugging-address`
+override is used.
 
 ### Local control ports are loopback-only with a fixed command set
 The widget and its background watcher accept small UDP control messages on

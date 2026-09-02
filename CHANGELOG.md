@@ -3,6 +3,17 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.6.1] - 2026-09-02
+
+### Fixed
+- **반복 로그인 회귀 수정**: 0.5.0에서 동기화가 끝날 때마다 백그라운드 브라우저를
+  종료(`close_browser`)하도록 한 변경이, 매 동기화마다 브라우저를 새로 띄우게 만들어
+  Claude 로그인 세션이 유지되지 않았습니다(Claude가 인증 토큰을 갱신하는데, 종료 시
+  갱신분이 유실됨). 그 결과 로그인해도 계속 "로그인 필요"가 뜨고 새 브라우저 창이
+  열렸습니다. 이제 숨겨진 브라우저를 동기화 사이에 **계속 유지**하고 위젯 종료 시에만
+  닫습니다. 디버그 포트는 `--remote-allow-origins=http://localhost` origin 제한으로
+  이미 보호되므로 보안 저하는 없습니다.
+
 ## [0.6.0] - 2026-09-02
 
 ### Added
@@ -93,6 +104,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.6.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.6.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.5.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.4.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

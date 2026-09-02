@@ -913,14 +913,12 @@ def main():
                 "detail": str(error),
             }
         )
-    finally:
-        # Shut the background browser (and its loopback debug port) after each
-        # sync so it is not left listening between refreshes. The login stays in
-        # the profile directory, so the next sync just relaunches it.
-        try:
-            close_browser()
-        except Exception:
-            pass
+    # The hidden background browser is deliberately left running between syncs:
+    # it holds the signed-in session in memory (Claude rotates its auth token, so
+    # killing the browser after every sync would drop the login and force a fresh
+    # sign-in each time). The loopback debug port is already protected by
+    # --remote-allow-origins=http://localhost, and the browser is stopped on exit
+    # via `usage.py --close`.
 
 
 if __name__ == "__main__":
