@@ -35,6 +35,11 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 LATEST = os.path.join(DIR, "latest.json")
 USAGE_URL = "https://claude.ai/settings/usage"
 
+# UI language for the labels and status text this script emits ("ko" or "en"),
+# set from --lang. Claude's own reset text is scraped from the page and follows
+# the account's language.
+LANG = "ko"
+
 LOCAL_DATA = os.environ.get("LOCALAPPDATA") or os.path.join(
     os.path.expanduser("~"), "AppData", "Local"
 )
@@ -704,12 +709,15 @@ ALL_MODEL_LABELS = ("all models", "모든 모델")
 
 
 def clean_label(label, index):
+    en = LANG == "en"
+    session = "Current session" if en else "현재 세션"
+    all_models = "All models" if en else "모든 모델"
     lowered = (label or "").strip().lower()
     if any(pattern in lowered for pattern in SESSION_LABELS):
-        return "현재 세션"
+        return session
     if any(pattern in lowered for pattern in ALL_MODEL_LABELS):
-        return "모든 모델"
-    return "현재 세션" if index == 0 else "모든 모델"
+        return all_models
+    return session if index == 0 else all_models
 
 
 def find_meter(meters, patterns):
@@ -786,6 +794,8 @@ def close_browser():
 
 def self_test():
     """Exercise Chrome startup, WebSocket framing, and meter parsing offline."""
+    global LANG
+    LANG = "ko"  # assertions below pin the Korean labels
     browser = find_browser()
     # Chrome can still hold profile files for a moment after it exits.
     with tempfile.TemporaryDirectory(
@@ -854,18 +864,23 @@ def self_test():
 
 
 def main():
+    global LANG
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--sync", action="store_true")
     group.add_argument("--connect", action="store_true")
     group.add_argument("--close", action="store_true")
     group.add_argument("--self-test", action="store_true")
+    parser.add_argument("--lang", choices=("ko", "en"), default="ko")
     args = parser.parse_args()
+    LANG = args.lang
+    en = LANG == "en"
 
     if args.connect:
         connect_browser()
         emit(
-            {"message": "Claude 로그인 후 펫의 새로고침 버튼을 다시 누르세요"},
+            {"message": "Sign in to Claude, then press the refresh button again"
+             if en else "Claude 로그인 후 펫의 새로고침 버튼을 다시 누르세요"},
             write_latest=False,
         )
         return
@@ -886,14 +901,15 @@ def main():
         emit(
             {
                 "code": "needs_login",
-                "error": "공식 사용량 연결 필요\n↻를 눌러 Claude에 로그인하세요",
+                "error": "Official usage needs sign-in\nPress ↻ to sign in to Claude"
+                if en else "공식 사용량 연결 필요\n↻를 눌러 Claude에 로그인하세요",
             }
         )
     except (OSError, ValueError, SyncError) as error:
         emit(
             {
                 "code": "sync_failed",
-                "error": "공식 사용량 동기화 실패",
+                "error": "Official usage sync failed" if en else "공식 사용량 동기화 실패",
                 "detail": str(error),
             }
         )

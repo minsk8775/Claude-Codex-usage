@@ -93,11 +93,16 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Open the app | Double-click Claude's area → the Claude app; Codex's area → the ChatGPT app. Installed apps are focused or launched (they are Store apps launched by AUMID); if an app is not installed its website opens instead |
 | Sync now | Click `↻` |
 | Hide / show | Click `×`, or left-click the notification icon |
-| Always on top on/off | Right-click the notification icon → `항상 위` |
+| Always on top on/off | Right-click the notification icon → `Always on top` |
+| Language (KO/EN) | Right-click anywhere (or the notification icon) → `Language` → `한국어` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
 
 Percent is **used** (the bar fills as you consume quota). A moved widget keeps
 its bottom edge fixed when the height changes between modes.
+
+The interface ships in **Korean and English**; switch under the right-click
+`Language` submenu. The choice is saved. (Claude's own reset text is read from
+its page and follows your Claude account language.)
 
 ### Update notifications (no auto-install)
 
@@ -170,6 +175,12 @@ Claude와 Codex 사용량을 **한 위젯에서 함께** 작업표시줄 위에 
 
 모델을 호출하지 않으므로 사용량 확인으로 할당량이 소모되지 않습니다.
 
+### 언어 (한국어 / English)
+
+인터페이스는 **한국어와 영어**를 지원합니다. 창 아무 곳 또는 알림 아이콘을 우클릭 →
+`언어 (Language)` → `한국어` / `English` 로 전환하며 선택은 저장됩니다. (Claude 쪽
+재설정 문구는 Claude 페이지에서 읽어 오므로 Claude 계정 언어를 따릅니다.)
+
 ### 보안
 
 쿠키·토큰·자격 증명 파일은 읽지 않으며, 렌더링된 사용량 값(Claude)과 Codex CLI가
@@ -222,7 +233,8 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 즉시 동기화 | `↻` |
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |
 | 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
-| 완전 종료 | 알림 아이콘 우클릭 → `Exit` |
+| 언어 (한/영) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `언어 (Language)` → `한국어` / `English` |
+| 완전 종료 | 알림 아이콘 우클릭 → `종료` |
 
 퍼센트는 **사용량 기준**(쓸수록 막대가 참)입니다. 창을 옮겨 둔 경우, 모드에 따라
 높이가 바뀌어도 아래 모서리가 고정됩니다.

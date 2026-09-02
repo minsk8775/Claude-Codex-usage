@@ -96,15 +96,49 @@ SOURCE_BY_KEY = {source["key"]: source for source in SOURCES}
 #   codex        - Codex only
 VIEW_MODES = ("auto", "both_stacked", "both_paged", "claude", "codex")
 DEFAULT_MODE = "auto"
-# (menu id, mode key, label) rendered in the tray menu, in this order.
+# (menu id, mode key, string key) rendered in the tray menu, in this order.
 MODE_MENU = (
-    (2000, "auto", "자동 (앱에 맞춰)"),
-    (2001, "claude", "Claude만 보기"),
-    (2002, "codex", "Codex만 보기"),
-    (2003, "both_stacked", "둘 다 보기"),
-    (2004, "both_paged", "둘 다 (좌우 전환)"),
+    (2000, "auto", "mode_auto"),
+    (2001, "claude", "mode_claude"),
+    (2002, "codex", "mode_codex"),
+    (2003, "both_stacked", "mode_both_stacked"),
+    (2004, "both_paged", "mode_both_paged"),
 )
-MODE_BY_ID = {menu_id: mode for menu_id, mode, _label in MODE_MENU}
+MODE_BY_ID = {menu_id: mode for menu_id, mode, _key in MODE_MENU}
+LANG_KO_ID = 3000
+LANG_EN_ID = 3001
+
+# UI language. The widget chrome, the update badge and the two reader scripts
+# (via a --lang flag) all follow this. Default Korean; switch in the right-click
+# / notification-icon menu. Claude's own reset text is scraped from its page and
+# follows Claude's account language.
+LANGS = ("ko", "en")
+DEFAULT_LANG = "ko"
+STRINGS = {
+    "syncing": {"ko": "사용량 동기화 중...", "en": "Syncing usage..."},
+    "syncing_official": {"ko": "공식 사용량 동기화 중...", "en": "Syncing official usage..."},
+    "update_full": {"ko": "● 업데이트 필요", "en": "● Update available"},
+    "update_short": {"ko": "● 업데이트", "en": "● Update"},
+    "mode_auto": {"ko": "자동 (앱에 맞춰)", "en": "Auto (follow apps)"},
+    "mode_claude": {"ko": "Claude만 보기", "en": "Claude only"},
+    "mode_codex": {"ko": "Codex만 보기", "en": "Codex only"},
+    "mode_both_stacked": {"ko": "둘 다 보기", "en": "Both (stacked)"},
+    "mode_both_paged": {"ko": "둘 다 (좌우 전환)", "en": "Both (arrows)"},
+    "always_on_top": {"ko": "항상 위 (Always on top)", "en": "Always on top"},
+    "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
+    "exit": {"ko": "종료", "en": "Exit"},
+    "language": {"ko": "언어 (Language)", "en": "Language"},
+    "lang_ko": {"ko": "한국어", "en": "한국어 (Korean)"},
+    "lang_en": {"ko": "영어 (English)", "en": "English"},
+}
+
+
+def tr(lang, key):
+    """Translate a UI string key for the given language, falling back to Korean."""
+    entry = STRINGS.get(key)
+    if not entry:
+        return key
+    return entry.get(lang) or entry.get(DEFAULT_LANG) or key
 # Desktop-app process image name -> usage source key, for the auto view.
 APP_KEY_BY_EXE = {"claude.exe": "claude", "chatgpt.exe": "codex"}
 
@@ -315,6 +349,7 @@ class TrayIcon:
     LR_LOADFROMFILE = 0x0010
     LR_DEFAULTSIZE = 0x0040
     MF_STRING = 0x0000
+    MF_POPUP = 0x0010
     MF_SEPARATOR = 0x0800
     MF_BYCOMMAND = 0x0000
     MF_CHECKED = 0x0008
@@ -331,6 +366,7 @@ class TrayIcon:
         self.callback = None
         self.current_mode = DEFAULT_MODE
         self.current_on_top = True
+        self.current_lang = DEFAULT_LANG
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
@@ -362,9 +398,10 @@ class TrayIcon:
 
     def _show_menu(self):
         user32 = ctypes.windll.user32
+        lang = self.current_lang
         menu = user32.CreatePopupMenu()
-        for menu_id, _mode, label in MODE_MENU:
-            user32.AppendMenuW(menu, self.MF_STRING, menu_id, label)
+        for menu_id, _mode, key in MODE_MENU:
+            user32.AppendMenuW(menu, self.MF_STRING, menu_id, tr(lang, key))
         checked = next(
             (menu_id for menu_id, mode, _ in MODE_MENU if mode == self.current_mode),
             MODE_MENU[0][0],
@@ -373,16 +410,25 @@ class TrayIcon:
             menu, MODE_MENU[0][0], MODE_MENU[-1][0], checked, self.MF_BYCOMMAND
         )
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, 1003, "항상 위 (Always on top)")
+        user32.AppendMenuW(menu, self.MF_STRING, 1003, tr(lang, "always_on_top"))
         user32.CheckMenuItem(
             menu,
             1003,
             self.MF_BYCOMMAND
             | (self.MF_CHECKED if self.current_on_top else self.MF_UNCHECKED),
         )
+        # Language submenu (Korean / English) as a radio group.
+        lang_menu = user32.CreatePopupMenu()
+        user32.AppendMenuW(lang_menu, self.MF_STRING, LANG_KO_ID, tr(lang, "lang_ko"))
+        user32.AppendMenuW(lang_menu, self.MF_STRING, LANG_EN_ID, tr(lang, "lang_en"))
+        user32.CheckMenuRadioItem(
+            lang_menu, LANG_KO_ID, LANG_EN_ID,
+            LANG_EN_ID if lang == "en" else LANG_KO_ID, self.MF_BYCOMMAND,
+        )
+        user32.AppendMenuW(menu, self.MF_POPUP, lang_menu, tr(lang, "language"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, 1001, "Show / Hide")
-        user32.AppendMenuW(menu, self.MF_STRING, 1002, "Exit")
+        user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
+        user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
         point = POINT()
         user32.GetCursorPos(ctypes.byref(point))
         user32.SetForegroundWindow(self.hwnd)
@@ -403,6 +449,10 @@ class TrayIcon:
             self.events.put(("exit", None))
         elif command == 1003:
             self.events.put(("toggle_ontop", None))
+        elif command == LANG_KO_ID:
+            self.events.put(("lang", "ko"))
+        elif command == LANG_EN_ID:
+            self.events.put(("lang", "en"))
         elif command in MODE_BY_ID:
             self.events.put(("mode", MODE_BY_ID[command]))
 
@@ -807,6 +857,8 @@ class UsageApp:
             self.page = 0
         mode = settings.get("mode", DEFAULT_MODE)
         self.mode = mode if mode in VIEW_MODES else DEFAULT_MODE
+        lang = settings.get("lang", DEFAULT_LANG)
+        self.lang = lang if lang in LANGS else DEFAULT_LANG
         self.on_top = bool(settings.get("on_top", True))
         self.app_ids = set()  # installed app AUMIDs; filled in the background
         self.auto_view = "both_stacked"  # effective view when mode == "auto"
@@ -857,6 +909,7 @@ class UsageApp:
         self.bottom_anchor = None
         self.mode_var = tk.StringVar(master=self.root, value=self.mode)
         self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
+        self.lang_var = tk.StringVar(master=self.root, value=self.lang)
         try:
             self._known_app_keys = running_app_keys()
         except Exception:
@@ -887,6 +940,7 @@ class UsageApp:
         self.tray = TrayIcon(self.events)
         self.tray.current_mode = self.mode
         self.tray.current_on_top = self.on_top
+        self.tray.current_lang = self.lang
         self.tray.start()
         self.listener = threading.Thread(target=self._listen, daemon=True)
         self.listener.start()
@@ -912,7 +966,7 @@ class UsageApp:
                 self.auto_view = view
                 if not self._stacked():
                     self.data = self.datas.get(self._source()["key"]) or {
-                        "error": "사용량 동기화 중..."
+                        "error": self._t("syncing")
                     }
                 self._draw()
                 self._place()
@@ -977,6 +1031,8 @@ class UsageApp:
                 self._place()
             elif action == "mode":
                 self._set_mode(payload)
+            elif action == "lang":
+                self._set_lang(payload)
             elif action == "toggle_ontop":
                 self._toggle_on_top()
             elif action == "sync_result":
@@ -1024,10 +1080,11 @@ class UsageApp:
         # Refresh every source currently on screen, one at a time. In stacked
         # mode that is both; otherwise just the visible one, so viewing Codex
         # never launches Claude's browser sync.
+        lang = self.lang
         for source in sources:
             key = source["key"]
             try:
-                result = run_script(source["script"], "--sync")
+                result = run_script(source["script"], "--sync", "--lang", lang)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)
@@ -1085,6 +1142,9 @@ class UsageApp:
             return list(SOURCES)
         return [self._source()]
 
+    def _t(self, key):
+        return tr(self.lang, key)
+
     def _set_mode(self, mode):
         if mode not in VIEW_MODES or mode == self.mode:
             return
@@ -1094,11 +1154,24 @@ class UsageApp:
             self.auto_view = self._desired_auto_view()
         if not self._stacked():
             self.data = self.datas.get(self._source()["key"]) or {
-                "error": "사용량 동기화 중..."
+                "error": self._t("syncing")
             }
         self._save_settings()
         self._draw()
         self._place()
+        self.start_sync(False)
+
+    def _set_lang(self, lang):
+        if lang not in LANGS or lang == self.lang:
+            return
+        self.lang = lang
+        self.tray.current_lang = lang
+        self.lang_var.set(lang)
+        self._save_settings()
+        self._draw()
+        self._place()
+        # Re-sync so the reader scripts regenerate their labels in the new
+        # language (Claude session/all-models, Codex windows and reset text).
         self.start_sync(False)
 
     def _toggle_on_top(self):
@@ -1118,7 +1191,7 @@ class UsageApp:
         try:
             return json.loads(Path(source["latest"]).read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return {"error": "사용량 동기화 중..."}
+            return {"error": self._t("syncing")}
 
     def _load_settings(self):
         try:
@@ -1143,6 +1216,7 @@ class UsageApp:
                         "page": self.page,
                         "mode": self.mode,
                         "on_top": self.on_top,
+                        "lang": self.lang,
                     }
                 ),
                 encoding="utf-8",
@@ -1324,7 +1398,7 @@ class UsageApp:
         avail = right_edge - left_bound
         # Widest label that fits the free header space; the dot always fits.
         text = "●"
-        for candidate in ("● 업데이트 필요", "● 업데이트", "●"):
+        for candidate in (self._t("update_full"), self._t("update_short"), "●"):
             if measure(candidate) <= avail or candidate == "●":
                 text = candidate
                 break
@@ -1355,7 +1429,7 @@ class UsageApp:
             self.canvas.create_text(
                 pad,
                 self._s(52),
-                text=str(self.data.get("error") or "공식 사용량 동기화 중..."),
+                text=str(self.data.get("error") or self._t("syncing_official")),
                 anchor="w",
                 fill="#F1707B",
                 width=self.width - 2 * pad,
@@ -1411,7 +1485,7 @@ class UsageApp:
             else:
                 self.canvas.create_text(
                     pad, self._s(row + 6),
-                    text=str(data.get("error") or "동기화 중..."),
+                    text=str(data.get("error") or self._t("syncing")),
                     anchor="w", fill="#F1707B", width=self.width - 2 * pad,
                     font=self._font(9),
                 )
@@ -1446,7 +1520,7 @@ class UsageApp:
         # refresh only that page in the background so flipping never launches
         # the other source's sync (e.g. Claude's browser).
         self.data = self.datas.get(self._source()["key"]) or {
-            "error": "사용량 동기화 중..."
+            "error": self._t("syncing")
         }
         self._save_settings()
         self._draw()
@@ -1530,9 +1604,9 @@ class UsageApp:
         top, show/hide, exit."""
         menu = tk.Menu(self.root, tearoff=0)
         self.mode_var.set(self.mode)
-        for _menu_id, key, label in MODE_MENU:
+        for _menu_id, key, string_key in MODE_MENU:
             menu.add_radiobutton(
-                label=label,
+                label=self._t(string_key),
                 value=key,
                 variable=self.mode_var,
                 command=lambda k=key: self._set_mode(k),
@@ -1540,13 +1614,24 @@ class UsageApp:
         menu.add_separator()
         self.on_top_var.set(self.on_top)
         menu.add_checkbutton(
-            label="항상 위 (Always on top)",
+            label=self._t("always_on_top"),
             variable=self.on_top_var,
             command=self._toggle_on_top,
         )
+        # Language submenu (Korean / English).
+        self.lang_var.set(self.lang)
+        lang_menu = tk.Menu(menu, tearoff=0)
+        for code, string_key in (("ko", "lang_ko"), ("en", "lang_en")):
+            lang_menu.add_radiobutton(
+                label=self._t(string_key),
+                value=code,
+                variable=self.lang_var,
+                command=lambda c=code: self._set_lang(c),
+            )
+        menu.add_cascade(label=self._t("language"), menu=lang_menu)
         menu.add_separator()
-        menu.add_command(label="Show / Hide", command=self.toggle)
-        menu.add_command(label="Exit", command=self.exit)
+        menu.add_command(label=self._t("show_hide"), command=self.toggle)
+        menu.add_command(label=self._t("exit"), command=self.exit)
         if x is None:
             x = self.root.winfo_pointerx()
             y = self.root.winfo_pointery()

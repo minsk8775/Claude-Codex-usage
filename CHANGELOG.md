@@ -3,6 +3,17 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.6.0] - 2026-09-02
+
+### Added
+- **한국어 / 영어 전환**: 우클릭(창 아무 곳) 및 알림 아이콘 메뉴에 **`언어
+  (Language)`** 하위 메뉴 추가 — `한국어` / `English` 선택. 보기 모드·항상 위·
+  표시/숨김·종료 등 메뉴 문구, 업데이트 배지, 상태 문구가 모두 번역됩니다. 전환하면
+  리더 스크립트(`usage.py`·`codex_usage.py`)가 `--lang`으로 라벨(현재 세션/모든 모델,
+  주간 한도 등)과 재설정 문구를 새 언어로 다시 생성합니다. 선택은 `settings.json`의
+  `lang`에 저장됩니다.
+  - Claude의 재설정 문구는 Claude 페이지에서 읽어 오므로 Claude 계정 언어를 따릅니다.
+
 ## [0.5.0] - 2026-09-02
 
 ### Security
@@ -82,6 +93,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.6.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.5.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.4.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.3.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

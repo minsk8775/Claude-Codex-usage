@@ -41,6 +41,10 @@ from datetime import datetime, timezone
 DIR = os.path.dirname(os.path.abspath(__file__))
 LATEST = os.path.join(DIR, "codex_latest.json")
 
+# UI language for the labels and reset text this script emits ("ko" or "en").
+# Set from --lang; the widget passes its own language through.
+LANG = "ko"
+
 # How far back to look, and how many recent files to inspect. A single active
 # session's last token_count is normally the global newest, but concurrent
 # sessions mean we compare timestamps across a handful of recent files.
@@ -195,26 +199,30 @@ def newest_snapshot(home=None):
 
 def window_label(minutes):
     """Name a rate-limit window from its server-supplied duration in minutes."""
+    en = LANG == "en"
     try:
         minutes = int(round(float(minutes)))
     except (TypeError, ValueError):
-        return "사용량"
+        return "Usage" if en else "사용량"
     table = {
-        300: "현재 세션",     # ~5 hours, the short rolling window
-        10080: "주간 한도",   # 7 days
-        1440: "일일 한도",    # 24 hours
-        43200: "월간 한도",   # 30 days
-        525600: "연간 한도",  # 365 days
+        300: ("Current session", "현재 세션"),   # ~5 hours, short rolling window
+        10080: ("Weekly limit", "주간 한도"),     # 7 days
+        1440: ("Daily limit", "일일 한도"),       # 24 hours
+        43200: ("Monthly limit", "월간 한도"),    # 30 days
+        525600: ("Yearly limit", "연간 한도"),    # 365 days
     }
     if minutes in table:
-        return table[minutes]
+        return table[minutes][0 if en else 1]
     if minutes % 10080 == 0:
-        return "%d주 한도" % (minutes // 10080)
+        weeks = minutes // 10080
+        return "%d-week limit" % weeks if en else "%d주 한도" % weeks
     if minutes % 1440 == 0:
-        return "%d일 한도" % (minutes // 1440)
+        days = minutes // 1440
+        return "%d-day limit" % days if en else "%d일 한도" % days
     if minutes % 60 == 0:
-        return "%d시간 한도" % (minutes // 60)
-    return "%d분 한도" % minutes
+        hours = minutes // 60
+        return "%d-hour limit" % hours if en else "%d시간 한도" % hours
+    return "%d-min limit" % minutes if en else "%d분 한도" % minutes
 
 
 def reset_at_epoch(window, event_epoch):
@@ -233,16 +241,25 @@ def reset_at_epoch(window, event_epoch):
 
 
 def human_reset(reset_epoch, now_epoch=None):
-    """Render a Korean 'resets in ...' string like the Claude widget shows."""
+    """Render a 'resets in ...' string like the Claude widget shows."""
+    en = LANG == "en"
     if not reset_epoch:
         return ""
     now = now_epoch if now_epoch is not None else datetime.now(timezone.utc).timestamp()
     delta = int(reset_epoch - now)
     if delta <= 0:
-        return "곧 재설정"
+        return "resets soon" if en else "곧 재설정"
     days, remainder = divmod(delta, 86400)
     hours, remainder = divmod(remainder, 3600)
     minutes = remainder // 60
+    if en:
+        if days >= 1:
+            return "resets in %dd %dh" % (days, hours) if hours else "resets in %dd" % days
+        if hours >= 1:
+            return "resets in %dh %dm" % (hours, minutes) if minutes else "resets in %dh" % hours
+        if minutes >= 1:
+            return "resets in %dm" % minutes
+        return "resets soon"
     if days >= 1:
         return "%d일 %d시간 후 재설정" % (days, hours) if hours else "%d일 후 재설정" % days
     if hours >= 1:
@@ -268,15 +285,20 @@ def make_bar(window, event_epoch, now_epoch=None):
 
 
 def make_payload(limits, event_epoch, now_epoch=None):
+    en = LANG == "en"
     if not isinstance(limits, dict):
-        raise SyncError("Codex 사용량 데이터를 찾지 못했습니다")
+        raise SyncError(
+            "No Codex usage data found" if en else "Codex 사용량 데이터를 찾지 못했습니다"
+        )
     bars = []
     for key in ("primary", "secondary"):
         bar = make_bar(limits.get(key), event_epoch, now_epoch)
         if bar:
             bars.append(bar)
     if not bars:
-        raise SyncError("Codex 사용량 막대를 찾지 못했습니다")
+        raise SyncError(
+            "No Codex usage bars found" if en else "Codex 사용량 막대를 찾지 못했습니다"
+        )
     payload = {
         "source": "codex-local",
         "synced_at": datetime.now(timezone.utc).isoformat(),
@@ -289,14 +311,19 @@ def make_payload(limits, event_epoch, now_epoch=None):
 
 
 def sync_usage(home=None):
+    en = LANG == "en"
     limits, event_epoch = newest_snapshot(home)
     if limits is None:
         root = sessions_dir(home)
         if not os.path.isdir(root):
             raise SyncError(
+                "Codex session folder not found\nRun the Codex CLI once"
+                if en else
                 "Codex 세션 폴더를 찾지 못했습니다\nCodex CLI를 한 번 실행하세요"
             )
         raise SyncError(
+            "No Codex usage recorded yet\nSend one prompt with Codex"
+            if en else
             "Codex 사용량 기록이 없습니다\nCodex로 프롬프트를 한 번 보내세요"
         )
     return make_payload(limits, event_epoch)
@@ -326,6 +353,8 @@ FIXTURE_LINES = [
 
 def self_test():
     """Parse a synthetic rollout offline: no ~/.codex and no network needed."""
+    global LANG
+    LANG = "ko"  # assertions below pin the Korean strings
     with tempfile.TemporaryDirectory(prefix="codexusage-test-") as home:
         day = os.path.join(sessions_dir(home), "2026", "08", "31")
         os.makedirs(day, exist_ok=True)
@@ -360,11 +389,14 @@ def self_test():
 
 
 def main():
+    global LANG
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--sync", action="store_true")
     group.add_argument("--self-test", action="store_true")
+    parser.add_argument("--lang", choices=("ko", "en"), default="ko")
     args = parser.parse_args()
+    LANG = args.lang
 
     if args.self_test:
         self_test()
@@ -378,7 +410,8 @@ def main():
         emit(
             {
                 "code": "sync_failed",
-                "error": "Codex 사용량 읽기 실패",
+                "error": "Failed to read Codex usage" if LANG == "en"
+                else "Codex 사용량 읽기 실패",
                 "detail": str(error),
             }
         )
