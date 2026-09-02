@@ -34,21 +34,24 @@ boundaries are:
 
 ## Hardening applied
 
-### Self-update is restricted to the official repository
-The widget can fast-forward itself with `git pull --ff-only` and relaunch. Because
-that runs freshly pulled code, it is the highest-impact path, so it is gated:
+### Updates are notify-only — never auto-installed
+The widget does **not** download and run new code on its own. Automatically
+executing freshly pulled code would be the highest-impact path, so it was removed:
 
-- Updates run **only** when `origin` is the project's own HTTPS URL
+- Shortly after start, the widget does a single **read-only** check: `git fetch`
+  (which updates remote-tracking refs but checks nothing out), then compares your
+  `HEAD` with the upstream branch. No fetched code is executed.
+- The check runs **only** when `origin` is the project's own HTTPS URL
   (`https://github.com/minsk8775/claude-codex-usage`). A repointed or forked
-  `origin` disables auto-update instead of executing its code.
-- Updates never use SSH or arbitrary remotes; trust rests on that HTTPS URL and
-  GitHub's TLS.
-- Only fast-forward merges are taken; local edits stop the update rather than being
-  overwritten.
+  `origin` produces no update prompt at all.
+- If newer widget code exists, a `● 업데이트 필요` badge appears in the header.
+  Clicking it opens the repository on GitHub so you can review the diff and install
+  it yourself (`git pull` then `install.cmd`). The install is always a deliberate,
+  user-initiated step.
 
-**Turn auto-update off** by setting the environment variable
+**Turn the check off** by setting the environment variable
 `CLAUDE_CODEX_NO_UPDATE=1` or creating an empty file named `.noupdate` next to
-`claude_usage.pyw`. You can then update manually with `git pull`.
+`claude_usage.pyw`. The widget then never contacts the remote for updates.
 
 ### Browser debug port is loopback-only and origin-restricted
 `usage.py` drives a Chrome/Edge instance over the DevTools protocol on a random
@@ -89,7 +92,8 @@ session is ever committed.
   ports. Impact is limited to showing, hiding, or closing the widget — no data
   exfiltration and no code execution. Defending against same-user local processes
   is out of scope for a user-level widget.
-- **Self-update trusts the upstream maintainer.** As with any self-updating tool,
-  a compromise of the official repository could ship malicious code on the next
-  fast-forward. Disable auto-update (above) if you prefer to review each update
-  yourself.
+- **Applying an update trusts the upstream maintainer.** The widget never installs
+  updates automatically, so a compromised repository cannot push code to your
+  machine on its own. The residual trust is only in what *you* choose to install
+  when you run `git pull` after clicking the badge — review the diff on GitHub
+  first, exactly as you would for any Git project.

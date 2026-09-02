@@ -17,6 +17,7 @@ import time
 import tkinter as tk
 from ctypes import wintypes
 from pathlib import Path
+from tkinter import font as tkfont
 from tkinter import messagebox
 
 
@@ -59,6 +60,8 @@ CLAUDE_AUMID = "Claude_pzs8sxrjxfjjc!Claude"
 CHATGPT_AUMID = "OpenAI.Codex_2p2nqsd0c76g0!App"
 CLAUDE_SITE = "https://claude.ai/new"
 CODEX_SITE = "https://chatgpt.com/codex/settings/usage"
+# Opened in the browser when the user clicks the "update needed" badge.
+REPO_URL = "https://github.com/minsk8775/claude-codex-usage"
 # Process image names of the desktop apps the watcher opens the widget for.
 WATCHED_APP_EXES = ("claude.exe", "chatgpt.exe")
 
@@ -166,15 +169,18 @@ def run_git(*arguments, timeout=90):
     )
 
 
-# Only auto-update from the project's own GitHub repository over HTTPS. This
-# stops a repointed "origin" from turning the self-update into arbitrary code
-# execution. (Case-insensitive; the .git suffix is optional.)
+# The widget never auto-installs updates. It only *checks* the project's own
+# GitHub repository over HTTPS and, when newer code exists, shows a badge the
+# user clicks to review and install it themselves. Checking is limited to the
+# trusted origin so a repointed "origin" cannot even prompt an update, and the
+# check is read-only (fetch, never checkout), so no downloaded code is executed.
+# (Case-insensitive; the .git suffix is optional.)
 ALLOWED_ORIGIN_PREFIXES = ("https://github.com/minsk8775/claude-codex-usage",)
 NO_UPDATE_FILE = BASE_DIR / ".noupdate"
 
 
-def auto_update_allowed():
-    """False when updates are disabled or origin is not the trusted repo."""
+def update_checks_allowed():
+    """False when update checks are disabled or origin is not the trusted repo."""
     if os.environ.get("CLAUDE_CODEX_NO_UPDATE") or NO_UPDATE_FILE.exists():
         return False
     origin = run_git("remote", "get-url", "origin")
@@ -186,33 +192,36 @@ def auto_update_allowed():
     return any(url == prefix or url.startswith(prefix + "/") for prefix in ALLOWED_ORIGIN_PREFIXES)
 
 
-def pull_updates():
-    """Fast-forward the checkout to origin.
+def updates_available():
+    """True when the trusted origin has newer widget code than this checkout.
 
-    Returns True when the code this process is running actually changed. Local
-    edits make the fast-forward fail, which leaves the checkout untouched.
+    Read-only: it fetches remote refs but never checks anything out, so no
+    downloaded code runs here. The user applies the update manually after
+    reviewing it on GitHub.
     """
     if not (BASE_DIR / ".git").exists():
         return False
-    if not auto_update_allowed():
+    if not update_checks_allowed():
         return False
     try:
-        before = run_git("rev-parse", "HEAD")
-        if before.returncode:
+        fetched = run_git("fetch", "--quiet", "origin")
+        if fetched.returncode:
+            log_error("update check skipped: %s" % (fetched.stderr or "").strip())
             return False
-        pulled = run_git("pull", "--ff-only")
-        if pulled.returncode:
-            log_error("update skipped: %s" % (pulled.stderr or pulled.stdout).strip())
+        head = run_git("rev-parse", "HEAD")
+        upstream = run_git("rev-parse", "@{u}")
+        if head.returncode or upstream.returncode:
             return False
-        after = run_git("rev-parse", "HEAD")
-        if after.returncode or after.stdout.strip() == before.stdout.strip():
+        if head.stdout.strip() == upstream.stdout.strip():
             return False
-        changed = run_git(
-            "diff", "--name-only", before.stdout.strip(), after.stdout.strip()
-        )
+        # Only flag when tracked source files differ, so a docs-only commit on
+        # the remote does not nag the user to update.
+        changed = run_git("diff", "--name-only", "HEAD", "@{u}")
+        if changed.returncode:
+            return False
         return any(name in UPDATE_SOURCES for name in changed.stdout.split())
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        log_error("update failed: %r" % error)
+        log_error("update check failed: %r" % error)
         return False
 
 
@@ -842,6 +851,8 @@ class UsageApp:
         self.hit_grip = (0, 0, 0, 0)
         self.hit_prev = (0, 0, 0, 0)
         self.hit_next = (0, 0, 0, 0)
+        self.hit_update = (0, 0, 0, 0)
+        self.update_available = False
         self.stack_regions = []
         self.bottom_anchor = None
         self.mode_var = tk.StringVar(master=self.root, value=self.mode)
@@ -960,6 +971,10 @@ class UsageApp:
                 self.exit()
             elif action == "restart":
                 self.restart()
+            elif action == "update_found":
+                self.update_available = True
+                self._draw()
+                self._place()
             elif action == "mode":
                 self._set_mode(payload)
             elif action == "toggle_ontop":
@@ -990,8 +1005,10 @@ class UsageApp:
         threading.Thread(target=self._update_worker, daemon=True).start()
 
     def _update_worker(self):
-        if pull_updates():
-            self.events.put(("restart", None))
+        # Notify only. We never auto-install; the badge lets the user review and
+        # apply the update on GitHub themselves.
+        if updates_available():
+            self.events.put(("update_found", None))
 
     def start_sync(self, manual):
         if self.syncing:
@@ -1284,7 +1301,45 @@ class UsageApp:
         self._draw_button(self.hit_sync, "..." if self.syncing else "↻")
         self._draw_button(self.hit_mode, "▾")
         self._draw_button(self.hit_close, "×")
+        self._draw_update_badge(title)
         self._draw_grip()
+
+    def _draw_update_badge(self, title):
+        """When newer code exists upstream, show a clickable badge in the header
+        between the title and the buttons. Clicking it opens the repo on GitHub
+        so the user can review and install the update themselves.
+        """
+        self.hit_update = (0, 0, 0, 0)
+        if not self.update_available:
+            return
+        pad = self._s(self.PAD)
+        font = self._font(8, "bold")
+        try:
+            measure = tkfont.Font(root=self.root, font=font).measure
+        except Exception:
+            return
+        gap = self._s(self.BUTTON_GAP)
+        right_edge = self.hit_sync[0] - gap
+        left_bound = pad + measure(title) + self._s(8)
+        avail = right_edge - left_bound
+        # Widest label that fits the free header space; the dot always fits.
+        text = "●"
+        for candidate in ("● 업데이트 필요", "● 업데이트", "●"):
+            if measure(candidate) <= avail or candidate == "●":
+                text = candidate
+                break
+        width = measure(text)
+        self.canvas.create_text(
+            right_edge, self._s(19), text=text, anchor="e",
+            fill="#F1707B", font=font,
+        )
+        # Clickable box with a little slack around the glyphs.
+        self.hit_update = (
+            right_edge - width - self._s(4),
+            self._s(self.BUTTON_TOP),
+            right_edge + self._s(3),
+            self._s(self.BUTTON_BOTTOM),
+        )
 
     def _draw(self):
         if self._stacked():
@@ -1376,6 +1431,7 @@ class UsageApp:
             or self._contains(self.hit_grip, x, y)
             or self._contains(self.hit_prev, x, y)
             or self._contains(self.hit_next, x, y)
+            or self._contains(self.hit_update, x, y)
         )
 
     def _change_page(self, delta):
@@ -1409,6 +1465,9 @@ class UsageApp:
         if self._paged() and self._contains(self.hit_next, event.x, event.y):
             self._change_page(1)
             return
+        if self._contains(self.hit_update, event.x, event.y):
+            self._open_update_page()
+            return
         if self._contains(self.hit_sync, event.x, event.y):
             self.start_sync(True)
             return
@@ -1441,6 +1500,14 @@ class UsageApp:
         if self.stack_regions:
             return self.stack_regions[-1][0]
         return "claude"
+
+    def _open_update_page(self):
+        """Open the project on GitHub so the user can review and install the
+        update. We never install it for them from here."""
+        try:
+            os.startfile(REPO_URL)
+        except OSError as error:
+            log_error("opening update page failed: %r" % error)
 
     def _open_source(self, key):
         if key == "codex":

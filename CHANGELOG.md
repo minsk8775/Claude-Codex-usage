@@ -6,10 +6,13 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 ## [0.5.0] - 2026-09-02
 
 ### Security
-- **자동 업데이트를 공식 저장소로 제한**: `origin`이 HTTPS 공식 저장소
-  (`github.com/minsk8775/claude-codex-usage`)일 때만 `git pull`을 실행합니다.
-  origin을 다른 곳으로 바꿔도 self-update가 임의 코드 실행으로 이어지지 않습니다.
-  `CLAUDE_CODEX_NO_UPDATE=1` 환경 변수 또는 `.noupdate` 파일로 끌 수 있습니다.
+- **자동 업데이트 제거 → 알림 방식으로 전환**: 위젯이 코드를 자동으로 내려받아
+  실행하지 않습니다. 시작 시 읽기 전용 확인(`git fetch`, checkout 없음)만 하고, 새
+  버전이 있으면 헤더에 빨간 **`● 업데이트 필요`** 배지를 띄웁니다. 클릭하면 GitHub
+  저장소가 열려 사용자가 직접 확인·설치(`git pull` 후 `install.cmd`)합니다. 확인은
+  `origin`이 HTTPS 공식 저장소일 때만 이뤄지며, `CLAUDE_CODEX_NO_UPDATE=1` 또는
+  `.noupdate` 파일로 끌 수 있습니다. 조용한 자동 코드 실행이 없어 저장소가 탈취돼도
+  임의 코드가 실행되지 않습니다.
 - **브라우저 디버그 포트 origin 제한**: `--remote-allow-origins=*` → `http://localhost`.
   악성 웹 페이지가 DevTools 포트에 붙는 것(DNS rebinding 등)을 차단합니다. 포트는
   기존처럼 loopback 전용이며, 동기화가 끝나면 브라우저를 닫아 포트를 남기지 않습니다.

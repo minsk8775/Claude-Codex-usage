@@ -99,14 +99,23 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 Percent is **used** (the bar fills as you consume quota). A moved widget keeps
 its bottom edge fixed when the height changes between modes.
 
-### Self-updating
+### Update notifications (no auto-install)
 
-When the folder is a Git checkout, the widget runs `git pull --ff-only` once
-shortly after it starts and relaunches itself if `claude_usage.pyw`,
-`usage.py`, or `codex_usage.py` changed. It updates **only** when `origin` is the
-official repository over HTTPS, so a repointed remote can't turn the self-update
-into arbitrary code. Turn it off with `CLAUDE_CODEX_NO_UPDATE=1` or an empty
-`.noupdate` file next to `claude_usage.pyw`.
+The widget **never installs updates by itself.** When the folder is a Git
+checkout, it does one read-only check shortly after start (`git fetch`, no
+checkout) against the official repository. If newer widget code exists, a red
+**`● 업데이트 필요`** badge appears in the header next to the buttons. Click it to
+open the project on GitHub, review the changes, and install them yourself:
+
+```cmd
+git pull
+install.cmd
+```
+
+Because nothing is downloaded-and-run automatically, a compromised or repointed
+remote cannot push code onto your machine. Turn the check off entirely with
+`CLAUDE_CODEX_NO_UPDATE=1` or an empty `.noupdate` file next to
+`claude_usage.pyw`.
 
 ### Security
 
@@ -114,7 +123,8 @@ It never reads cookies, tokens, or credential files — only the rendered usage
 meters (Claude) and the local rate-limit snapshot the Codex CLI already wrote. It
 makes no inbound connections and opens no off-host ports: the browser debug port
 is loopback-only and origin-restricted, and the widget's control ports
-(`127.0.0.1:47671/47672`) take a fixed set of commands, never a shell. See
+(`127.0.0.1:47671/47672`) take a fixed set of commands, never a shell. It never
+auto-installs updates — it only checks and notifies, and you install manually. See
 [`SECURITY.md`](SECURITY.md) for the full trust model, hardening, and how to report
 an issue.
 
@@ -166,9 +176,13 @@ Claude와 Codex 사용량을 **한 위젯에서 함께** 작업표시줄 위에 
 로컬에 남긴 rate-limit 스냅샷만 봅니다. 외부에서 접근 가능한 포트를 열지 않습니다 —
 브라우저 디버그 포트는 loopback 전용에 origin 제한(`http://localhost`)이 걸려 있고,
 위젯 제어 포트(`127.0.0.1:47671/47672`)는 셸이 아니라 고정된 명령 집합만 받습니다.
-자동 업데이트는 **공식 저장소(HTTPS)일 때만** 동작하므로 origin을 바꿔도 임의 코드
-실행으로 이어지지 않으며, `CLAUDE_CODEX_NO_UPDATE=1` 또는 `.noupdate` 파일로 끌 수
-있습니다. 전체 신뢰 모델·강화 내역·신고 방법은 [`SECURITY.md`](SECURITY.md) 참고.
+업데이트는 **자동 설치하지 않습니다.** 시작 시 읽기 전용으로 한 번만 확인(`git
+fetch`)하고, 새 버전이 있으면 헤더에 빨간 **`● 업데이트 필요`** 배지를 띄웁니다.
+클릭하면 GitHub가 열려 직접 확인·설치(`git pull` 후 `install.cmd`)합니다. 다운로드한
+코드를 자동 실행하지 않으므로 origin이 바뀌거나 저장소가 탈취돼도 임의 코드가 내
+컴퓨터에서 실행되지 않습니다. `CLAUDE_CODEX_NO_UPDATE=1` 또는 `.noupdate` 파일로
+확인 자체를 끌 수 있습니다. 전체 신뢰 모델·강화 내역·신고 방법은
+[`SECURITY.md`](SECURITY.md) 참고.
 
 ### 요구 사항
 
