@@ -327,7 +327,10 @@ def wait_for_debug(port, process=None, hidden_pid=None):
 def browser_flags(port, profile, visible):
     flags = [
         "--remote-debugging-port=%d" % port,
-        "--remote-allow-origins=*",
+        # Only our local DevTools client (Origin: http://localhost) may attach;
+        # blocks a malicious web page from reaching the debug port (e.g. via DNS
+        # rebinding). The port itself is bound to loopback.
+        "--remote-allow-origins=http://localhost",
         "--user-data-dir=%s" % profile,
         "--no-first-run",
         "--no-default-browser-check",
@@ -894,6 +897,14 @@ def main():
                 "detail": str(error),
             }
         )
+    finally:
+        # Shut the background browser (and its loopback debug port) after each
+        # sync so it is not left listening between refreshes. The login stays in
+        # the profile directory, so the next sync just relaunches it.
+        try:
+            close_browser()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

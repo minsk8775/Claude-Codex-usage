@@ -103,7 +103,20 @@ its bottom edge fixed when the height changes between modes.
 
 When the folder is a Git checkout, the widget runs `git pull --ff-only` once
 shortly after it starts and relaunches itself if `claude_usage.pyw`,
-`usage.py`, or `codex_usage.py` changed.
+`usage.py`, or `codex_usage.py` changed. It updates **only** when `origin` is the
+official repository over HTTPS, so a repointed remote can't turn the self-update
+into arbitrary code. Turn it off with `CLAUDE_CODEX_NO_UPDATE=1` or an empty
+`.noupdate` file next to `claude_usage.pyw`.
+
+### Security
+
+It never reads cookies, tokens, or credential files — only the rendered usage
+meters (Claude) and the local rate-limit snapshot the Codex CLI already wrote. It
+makes no inbound connections and opens no off-host ports: the browser debug port
+is loopback-only and origin-restricted, and the widget's control ports
+(`127.0.0.1:47671/47672`) take a fixed set of commands, never a shell. See
+[`SECURITY.md`](SECURITY.md) for the full trust model, hardening, and how to report
+an issue.
 
 ### Project files
 
@@ -146,6 +159,16 @@ Claude와 Codex 사용량을 **한 위젯에서 함께** 작업표시줄 위에 
   스냅샷을 로컬에서 읽습니다. 브라우저·로그인 불필요.
 
 모델을 호출하지 않으므로 사용량 확인으로 할당량이 소모되지 않습니다.
+
+### 보안
+
+쿠키·토큰·자격 증명 파일은 읽지 않으며, 렌더링된 사용량 값(Claude)과 Codex CLI가
+로컬에 남긴 rate-limit 스냅샷만 봅니다. 외부에서 접근 가능한 포트를 열지 않습니다 —
+브라우저 디버그 포트는 loopback 전용에 origin 제한(`http://localhost`)이 걸려 있고,
+위젯 제어 포트(`127.0.0.1:47671/47672`)는 셸이 아니라 고정된 명령 집합만 받습니다.
+자동 업데이트는 **공식 저장소(HTTPS)일 때만** 동작하므로 origin을 바꿔도 임의 코드
+실행으로 이어지지 않으며, `CLAUDE_CODEX_NO_UPDATE=1` 또는 `.noupdate` 파일로 끌 수
+있습니다. 전체 신뢰 모델·강화 내역·신고 방법은 [`SECURITY.md`](SECURITY.md) 참고.
 
 ### 요구 사항
 

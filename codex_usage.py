@@ -47,6 +47,11 @@ LATEST = os.path.join(DIR, "codex_latest.json")
 SCAN_DAYS = 14
 SCAN_FILES = 24
 
+# Skip pathologically long lines before parsing them as JSON. A real
+# token_count line is a few hundred bytes; this only guards against a corrupt
+# or hostile rollout with a huge blob exhausting memory on json.loads.
+MAX_LINE_CHARS = 2_000_000
+
 
 class SyncError(Exception):
     """A recoverable read failure suitable for the widget."""
@@ -159,6 +164,8 @@ def newest_snapshot(home=None):
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
                 for line in handle:
+                    if len(line) > MAX_LINE_CHARS:
+                        continue
                     line = line.strip()
                     if not line or '"token_count"' not in line:
                         continue

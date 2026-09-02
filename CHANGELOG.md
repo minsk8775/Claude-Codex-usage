@@ -3,6 +3,25 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.5.0] - 2026-09-02
+
+### Security
+- **자동 업데이트를 공식 저장소로 제한**: `origin`이 HTTPS 공식 저장소
+  (`github.com/minsk8775/claude-codex-usage`)일 때만 `git pull`을 실행합니다.
+  origin을 다른 곳으로 바꿔도 self-update가 임의 코드 실행으로 이어지지 않습니다.
+  `CLAUDE_CODEX_NO_UPDATE=1` 환경 변수 또는 `.noupdate` 파일로 끌 수 있습니다.
+- **브라우저 디버그 포트 origin 제한**: `--remote-allow-origins=*` → `http://localhost`.
+  악성 웹 페이지가 DevTools 포트에 붙는 것(DNS rebinding 등)을 차단합니다. 포트는
+  기존처럼 loopback 전용이며, 동기화가 끝나면 브라우저를 닫아 포트를 남기지 않습니다.
+- **Codex 로그 파싱 방어**: 비정상적으로 긴 rollout 줄을 파싱 전에 건너뛰어
+  (`MAX_LINE_CHARS`) 손상·악성 파일이 메모리를 소모하지 못하게 합니다.
+- 보안 정책 문서 **`SECURITY.md`** 추가, README에 보안 섹션 추가.
+
+### Notes
+- 제어 포트(UDP 47671/47672)는 계속 loopback 전용이며 64바이트 상한과 고정 명령
+  화이트리스트로만 처리됩니다. 모든 외부 프로세스 실행은 셸 없이 argv 리스트로
+  호출되고, 앱 실행 대상(AUMID·URL)은 하드코딩 상수입니다.
+
 ## [0.4.0] - 2026-09-01
 
 ### Added
@@ -60,6 +79,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.5.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.4.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.3.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.2.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

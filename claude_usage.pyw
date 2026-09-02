@@ -166,6 +166,26 @@ def run_git(*arguments, timeout=90):
     )
 
 
+# Only auto-update from the project's own GitHub repository over HTTPS. This
+# stops a repointed "origin" from turning the self-update into arbitrary code
+# execution. (Case-insensitive; the .git suffix is optional.)
+ALLOWED_ORIGIN_PREFIXES = ("https://github.com/minsk8775/claude-codex-usage",)
+NO_UPDATE_FILE = BASE_DIR / ".noupdate"
+
+
+def auto_update_allowed():
+    """False when updates are disabled or origin is not the trusted repo."""
+    if os.environ.get("CLAUDE_CODEX_NO_UPDATE") or NO_UPDATE_FILE.exists():
+        return False
+    origin = run_git("remote", "get-url", "origin")
+    if origin.returncode:
+        return False
+    url = origin.stdout.strip().lower()
+    if url.endswith(".git"):
+        url = url[:-4]
+    return any(url == prefix or url.startswith(prefix + "/") for prefix in ALLOWED_ORIGIN_PREFIXES)
+
+
 def pull_updates():
     """Fast-forward the checkout to origin.
 
@@ -173,6 +193,8 @@ def pull_updates():
     edits make the fast-forward fail, which leaves the checkout untouched.
     """
     if not (BASE_DIR / ".git").exists():
+        return False
+    if not auto_update_allowed():
         return False
     try:
         before = run_git("rev-parse", "HEAD")
