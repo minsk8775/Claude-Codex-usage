@@ -50,7 +50,8 @@ STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
 MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
-UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py")
+UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py", "install.py", "install.cmd")
+CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "hide", "toggle", "exit")}
 
 # The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
 # a protected WindowsApps folder, so they cannot be launched by their exe path.
@@ -62,13 +63,6 @@ CLAUDE_SITE = "https://claude.ai/new"
 CODEX_SITE = "https://chatgpt.com/codex/settings/usage"
 # Opened in the browser when the user clicks the "update needed" badge.
 REPO_URL = "https://github.com/minsk8775/claude-codex-usage"
-# Substrings matched (case-insensitively) against a process image name to detect
-# the Claude / ChatGPT desktop apps, so the watcher can pop the widget up when one
-# launches. Substring (not exact "chatgpt.exe") so a differently-named build still
-# matches — the same approach the double-click app-open uses. pythonw.exe (this
-# widget) and node-based Claude Code do not contain these, so they never match.
-WATCHED_APP_NAMES = ("claude", "chatgpt")
-
 # The widget shows one page per source and flips between them with the on-screen
 # arrows. Each page reads its own latest.json and refreshes with its own script.
 # "connect" marks a source whose first sync may need an interactive login step
@@ -213,7 +207,7 @@ def run_git(*arguments, timeout=90):
 # trusted origin so a repointed "origin" cannot even prompt an update, and the
 # check is read-only (fetch, never checkout), so no downloaded code is executed.
 # (Case-insensitive; the .git suffix is optional.)
-ALLOWED_ORIGIN_PREFIXES = ("https://github.com/minsk8775/claude-codex-usage",)
+ALLOWED_ORIGINS = ("https://github.com/minsk8775/claude-codex-usage",)
 NO_UPDATE_FILE = BASE_DIR / ".noupdate"
 
 
@@ -227,7 +221,7 @@ def update_checks_allowed():
     url = origin.stdout.strip().lower()
     if url.endswith(".git"):
         url = url[:-4]
-    return any(url == prefix or url.startswith(prefix + "/") for prefix in ALLOWED_ORIGIN_PREFIXES)
+    return url in ALLOWED_ORIGINS
 
 
 def updates_available():
@@ -239,22 +233,24 @@ def updates_available():
     """
     if not (BASE_DIR / ".git").exists():
         return False
-    if not update_checks_allowed():
-        return False
     try:
-        fetched = run_git("fetch", "--quiet", "origin")
+        if not update_checks_allowed():
+            return False
+        fetched = run_git("fetch", "--quiet", "--no-tags", "--no-recurse-submodules", "origin", "main")
         if fetched.returncode:
             log_error("update check skipped: %s" % (fetched.stderr or "").strip())
             return False
         head = run_git("rev-parse", "HEAD")
-        upstream = run_git("rev-parse", "@{u}")
+        upstream = run_git("rev-parse", "FETCH_HEAD")
         if head.returncode or upstream.returncode:
             return False
         if head.stdout.strip() == upstream.stdout.strip():
             return False
+        if run_git("merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD").returncode:
+            return False
         # Only flag when tracked source files differ, so a docs-only commit on
         # the remote does not nag the user to update.
-        changed = run_git("diff", "--name-only", "HEAD", "@{u}")
+        changed = run_git("diff", "--name-only", "HEAD", "FETCH_HEAD", "--", *UPDATE_SOURCES)
         if changed.returncode:
             return False
         return any(name in UPDATE_SOURCES for name in changed.stdout.split())
@@ -852,7 +848,7 @@ class UsageApp:
 
     def __init__(self, control_socket):
         self.control_socket = control_socket
-        self.events = queue.Queue()
+        self.events = queue.Queue(maxsize=256)
         settings = self._load_settings()
         self.scale = self._clamp_scale(settings.get("scale", 1.0))
         try:
@@ -890,6 +886,7 @@ class UsageApp:
         self.datas = {source["key"]: self._load_latest(source) for source in SOURCES}
         self.data = self.datas[self._source()["key"]]
         self.syncing = False
+        self.pending_sync = None
         self.user_moved = False
         self.dragging = False
         self.resizing = False
@@ -977,7 +974,7 @@ class UsageApp:
                 self.start_sync(False)
             # The window follows the apps: it appears when one is running and
             # hides when both are closed; reopening an app brings it back.
-            if keys and self.root.state() == "withdrawn":
+            if (keys - self._known_app_keys) and self.root.state() == "withdrawn":
                 self.show()
             elif not keys and self.root.state() != "withdrawn":
                 self.hide()
@@ -1008,27 +1005,38 @@ class UsageApp:
         self.control_socket.settimeout(0.5)
         while not self.exiting:
             try:
-                message, _ = self.control_socket.recvfrom(64)
-                self.events.put((message.decode("ascii", errors="ignore"), None))
+                message, _ = self.control_socket.recvfrom(65)
+                action = CONTROL_ACTIONS.get(message)
+                if action is not None:
+                    try:
+                        self.events.put_nowait((action, None))
+                    except queue.Full:
+                        pass
             except socket.timeout:
                 continue
-            except OSError:
+            except OSError as error:
+                if getattr(error, "winerror", None) == 10040:  # oversized UDP datagram
+                    continue
                 break
 
     def _poll_events(self):
-        while True:
+        for _ in range(64):
             try:
                 action, payload = self.events.get_nowait()
             except queue.Empty:
                 break
             if action == "show":
                 self.show()
+            elif action == "hide":
+                self.hide()
             elif action == "toggle":
                 self.toggle()
             elif action == "exit":
                 self.exit()
+                return
             elif action == "restart":
                 self.restart()
+                return
             elif action == "update_found":
                 self.update_available = True
                 self._draw()
@@ -1050,6 +1058,9 @@ class UsageApp:
                 self.syncing = False
                 self._draw()
                 self._place()
+                if self.pending_sync is not None:
+                    manual, self.pending_sync = self.pending_sync, None
+                    self.start_sync(manual)
         if not self.exiting:
             self.root.after(100, self._poll_events)
 
@@ -1071,21 +1082,25 @@ class UsageApp:
             self.events.put(("update_found", None))
 
     def start_sync(self, manual):
+        if self.exiting:
+            return
         if self.syncing:
+            self.pending_sync = bool(manual or self.pending_sync)
             return
         self.syncing = True
         sources = self._visible_sources()
         self._draw()
         threading.Thread(
-            target=self._sync_worker, args=(sources, manual), daemon=True
+            target=self._sync_worker, args=(sources, manual, self.lang), daemon=True
         ).start()
 
-    def _sync_worker(self, sources, manual):
+    def _sync_worker(self, sources, manual, lang):
         # Refresh every source currently on screen, one at a time. In stacked
         # mode that is both; otherwise just the visible one, so viewing Codex
         # never launches Claude's browser sync.
-        lang = self.lang
         for source in sources:
+            if self.exiting:
+                break
             key = source["key"]
             try:
                 result = run_script(source["script"], "--sync", "--lang", lang)
@@ -1093,9 +1108,10 @@ class UsageApp:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)
                     )
+                    raise RuntimeError("%s reader failed" % key)
                 data = self._load_latest(source)
                 if manual and source.get("connect") and data.get("code") == "needs_login":
-                    run_script(source["script"], "--connect")
+                    run_script(source["script"], "--connect", "--lang", lang)
                 self.events.put(("sync_result", (key, data)))
             except Exception as error:
                 log_error(repr(error))
@@ -1193,9 +1209,12 @@ class UsageApp:
     def _load_latest(self, source=None):
         source = source or self._source()
         try:
-            return json.loads(Path(source["latest"]).read_text(encoding="utf-8"))
+            data = json.loads(Path(source["latest"]).read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
         except (OSError, ValueError):
-            return {"error": self._t("syncing")}
+            pass
+        return {"error": self._t("syncing")}
 
     def _load_settings(self):
         try:
@@ -1342,6 +1361,8 @@ class UsageApp:
         """Draw one usage bar (label, percent, track/fill, reset text) at row_y."""
         pct = max(0.0, min(float(bar.get("pct", 0)), 100.0))
         color = "#F1707B" if pct >= 90 else "#F5A85F" if pct >= 75 else "#4C8BF5"
+        if bar.get("stale"):
+            color = "#999999"
         self.canvas.create_text(
             pad, row_y, text=str(bar.get("label", "")), anchor="w",
             fill="#EEEEEE", font=self._font(10, "bold"),
@@ -1766,41 +1787,6 @@ class PROCESSENTRY32W(ctypes.Structure):
     ]
 
 
-def watched_app_process_ids():
-    """PIDs of the Claude and ChatGPT desktop apps (and Claude Code) currently
-    running. Matched by process image name so the widget can pop up when one of
-    them launches.
-    """
-    kernel32 = ctypes.windll.kernel32
-    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
-    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-    kernel32.Process32FirstW.argtypes = [
-        wintypes.HANDLE,
-        ctypes.POINTER(PROCESSENTRY32W),
-    ]
-    kernel32.Process32NextW.argtypes = [
-        wintypes.HANDLE,
-        ctypes.POINTER(PROCESSENTRY32W),
-    ]
-    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
-    if snapshot == wintypes.HANDLE(-1).value:
-        return set()
-    result = set()
-    entry = PROCESSENTRY32W()
-    entry.dwSize = ctypes.sizeof(entry)
-    try:
-        success = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
-        while success:
-            name = entry.szExeFile.lower()
-            if any(app in name for app in WATCHED_APP_NAMES):
-                result.add(int(entry.th32ProcessID))
-            success = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
-    finally:
-        kernel32.CloseHandle(snapshot)
-    return result
-
-
 def running_app_keys():
     """Return the source keys ('claude'/'codex') whose desktop app is running.
 
@@ -1860,16 +1846,19 @@ def run_watcher():
     known = set()
     try:
         while True:
-            current = watched_app_process_ids()
-            if any(process_id not in known for process_id in current) and AUTO_FILE.exists():
+            current = running_app_keys()
+            if (current - known) and AUTO_FILE.exists():
                 start_main()
             known = current
             try:
-                message, _ = control.recvfrom(64)
-                if message.decode("ascii", errors="ignore") == "exit":
+                message, _ = control.recvfrom(65)
+                if message == b"exit":
                     break
             except socket.timeout:
                 pass
+            except OSError as error:
+                if getattr(error, "winerror", None) != 10040:
+                    raise
     finally:
         control.close()
     return 0

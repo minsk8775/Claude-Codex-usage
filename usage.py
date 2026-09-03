@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import shutil
-import signal
 import socket
 import struct
 import subprocess
@@ -50,6 +49,7 @@ READY = os.path.join(APP_DATA, "connected.json")
 
 CONNECT_TIMEOUT = 12
 PAGE_TIMEOUT = 20
+MAX_MESSAGE_BYTES = 2_000_000
 
 
 class SyncError(Exception):
@@ -251,34 +251,97 @@ def save_state(data):
     atomic_json(STATE, data)
 
 
+def loopback_url(url, scheme):
+    """Validate DevTools endpoints before any network access; never resolve DNS."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if (parsed.scheme != scheme or parsed.hostname not in ("127.0.0.1", "::1", "localhost")
+                or parsed.username is not None or parsed.password is not None
+                or parsed.fragment or not parsed.port):
+            raise ValueError("not a loopback DevTools endpoint")
+        host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
+        return parsed._replace(netloc="%s:%d" % (host, parsed.port))
+    except (TypeError, ValueError) as error:
+        raise SyncError("Invalid local browser endpoint") from error
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def http_json(url, method="GET", timeout=2):
-    request = urllib.request.Request(url, method=method)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    request = urllib.request.Request(loopback_url(url, "http").geturl(), method=method)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirectHandler())
+    with opener.open(request, timeout=timeout) as response:
+        data = response.read(MAX_MESSAGE_BYTES + 1)
+        if len(data) > MAX_MESSAGE_BYTES:
+            raise SyncError("Browser response is too large")
+        return json.loads(data.decode("utf-8"))
 
 
 def debug_alive(port):
     try:
         http_json("http://127.0.0.1:%d/json/version" % int(port), timeout=1)
         return True
-    except (OSError, ValueError, urllib.error.URLError):
+    except (OSError, ValueError, TypeError, SyncError, urllib.error.URLError):
         return False
 
 
+def windows_process_api():
+    from ctypes import wintypes
+
+    api = ctypes.windll.kernel32
+    api.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    api.OpenProcess.restype = wintypes.HANDLE
+    api.CloseHandle.argtypes = [wintypes.HANDLE]
+    api.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    api.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    api.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    api.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    return api
+
+
+def process_identity(api, handle):
+    """Read the executable and creation time from an already-open process."""
+    from ctypes import wintypes
+
+    size = wintypes.DWORD(32768)
+    path = ctypes.create_unicode_buffer(size.value)
+    times = [wintypes.FILETIME() for _ in range(4)]
+    if (not api.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(size))
+            or not api.GetProcessTimes(handle, *(ctypes.byref(value) for value in times))):
+        raise ctypes.WinError()
+    created = (times[0].dwHighDateTime << 32) | times[0].dwLowDateTime
+    return os.path.normcase(os.path.abspath(path.value)), created
+
+
 def stop_owned_browser(state):
-    """Stop only a hidden browser process that this app recorded itself."""
-    if state.get("mode") != "background":
-        return
+    """Validate identity, then terminate that same handle, never a saved PID."""
+    if os.name != "nt" or state.get("mode") != "background":
+        return False
+    pid, created = state.get("pid"), state.get("process_created")
+    browser, profile = state.get("browser"), state.get("profile")
+    if (type(pid) is not int or pid <= 0 or type(created) is not int or created <= 0
+            or not isinstance(browser, str) or not isinstance(profile, str)
+            or os.path.normcase(os.path.abspath(profile)) != os.path.normcase(os.path.abspath(PROFILE))):
+        return False  # Old/incomplete state cannot prove ownership.
+    api = windows_process_api()
+    handle = api.OpenProcess(0x1000 | 0x0001 | 0x100000, False, pid)  # query, terminate, synchronize
+    if not handle:
+        return False
     try:
-        pid = int(state.get("pid", 0))
-    except (TypeError, ValueError):
-        return
-    if pid <= 0:
-        return
-    try:
-        os.kill(pid, signal.SIGTERM)
+        expected = os.path.normcase(os.path.abspath(browser)), created
+        if process_identity(api, handle) != expected:
+            return False
+        if not api.TerminateProcess(handle, 0):
+            return False
+        return api.WaitForSingleObject(handle, 3000) == 0
     except OSError:
-        pass
+        return False
+    finally:
+        api.CloseHandle(handle)
 
 
 def hide_browser_windows(pid):
@@ -332,9 +395,8 @@ def wait_for_debug(port, process=None, hidden_pid=None):
 def browser_flags(port, profile, visible):
     flags = [
         "--remote-debugging-port=%d" % port,
-        # Only our local DevTools client (Origin: http://localhost) may attach;
-        # blocks a malicious web page from reaching the debug port (e.g. via DNS
-        # rebinding). The port itself is bound to loopback.
+        # Reject WebSocket origins other than our local client's origin.
+        # This is not authentication: local programs can supply this header.
         "--remote-allow-origins=http://localhost",
         "--user-data-dir=%s" % profile,
         "--no-first-run",
@@ -384,6 +446,15 @@ def launch_browser(visible):
         "browser": browser,
         "profile": PROFILE,
     }
+    if os.name == "nt":
+        api = windows_process_api()
+        handle = api.OpenProcess(0x1000, False, process.pid)
+        if not handle:
+            raise SyncError("Cannot record browser process identity")
+        try:
+            _path, state["process_created"] = process_identity(api, handle)
+        finally:
+            api.CloseHandle(handle)
     save_state(state)
     if not visible:
         hide_browser_windows(process.pid)
@@ -408,7 +479,8 @@ def connect_browser():
         if state.get("mode") == "visible":
             open_page(state["port"], USAGE_URL)
             return state
-        stop_owned_browser(state)
+        if not stop_owned_browser(state):
+            raise SyncError("Close the old dedicated usage browser before signing in again")
         time.sleep(0.8)
     return launch_browser(visible=True)
 
@@ -437,9 +509,7 @@ class WebSocket:
     """Tiny RFC 6455 client, sufficient for the local Chrome DevTools socket."""
 
     def __init__(self, url, timeout=10):
-        parsed = urllib.parse.urlparse(url)
-        if parsed.scheme != "ws":
-            raise SyncError("지원하지 않는 브라우저 연결 방식입니다")
+        parsed = loopback_url(url, "ws")
         self.socket = socket.create_connection((parsed.hostname, parsed.port), timeout)
         self.socket.settimeout(timeout)
         self.buffer = b""
@@ -449,13 +519,13 @@ class WebSocket:
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         request = (
             "GET %s HTTP/1.1\r\n"
-            "Host: %s:%s\r\n"
+            "Host: %s\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             "Sec-WebSocket-Key: %s\r\n"
             "Sec-WebSocket-Version: 13\r\n"
             "Origin: http://localhost\r\n\r\n"
-        ) % (path, parsed.hostname, parsed.port, key)
+        ) % (path, parsed.netloc, key)
         self.socket.sendall(request.encode("ascii"))
         headers = self._read_headers()
         if not headers.startswith(b"HTTP/1.1 101"):
@@ -510,6 +580,7 @@ class WebSocket:
     def recv_message(self):
         chunks = []
         message_opcode = None
+        message_size = 0
         while True:
             first, second = self._read_exact(2)
             final = bool(first & 0x80)
@@ -520,6 +591,10 @@ class WebSocket:
                 length = struct.unpack("!H", self._read_exact(2))[0]
             elif length == 127:
                 length = struct.unpack("!Q", self._read_exact(8))[0]
+            if length > MAX_MESSAGE_BYTES or message_size + length > MAX_MESSAGE_BYTES:
+                raise SyncError("Browser message is too large")
+            if opcode >= 0x8 and (not final or length > 125):
+                raise SyncError("Invalid browser control frame")
             mask = self._read_exact(4) if masked else None
             payload = self._read_exact(length)
             if mask:
@@ -534,8 +609,10 @@ class WebSocket:
             if opcode in (0x1, 0x2):
                 message_opcode = opcode
                 chunks = [payload]
+                message_size = length
             elif opcode == 0x0 and message_opcode is not None:
                 chunks.append(payload)
+                message_size += length
             else:
                 continue
             if final:
@@ -559,7 +636,9 @@ class WebSocket:
 
 
 class DevTools:
-    def __init__(self, websocket_url):
+    def __init__(self, websocket_url, port=None):
+        if port is not None and loopback_url(websocket_url, "ws").port != port:
+            raise SyncError("Browser endpoint changed ports")
         self.websocket = WebSocket(websocket_url)
         self.request_id = 0
 
@@ -779,7 +858,7 @@ def sync_usage():
     websocket_url = target.get("webSocketDebuggerUrl")
     if not websocket_url:
         raise SyncError("사용량 페이지에 연결하지 못했습니다")
-    devtools = DevTools(websocket_url)
+    devtools = DevTools(websocket_url, state["port"])
     try:
         payload = make_payload(refresh_usage(devtools))
         atomic_json(READY, {"connected_at": payload["synced_at"]})

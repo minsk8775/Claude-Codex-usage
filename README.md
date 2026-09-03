@@ -46,6 +46,8 @@ anywhere on the widget**, or from the notification-area icon:
 
 In auto mode the widget appears and hides on its own with the apps; a running
 background watcher also opens it when an app starts even if the widget was closed.
+Hiding it with `×` or the tray menu stays in effect while the same apps remain
+open. A newly opened or reopened watched app brings it back.
 
 ---
 
@@ -58,6 +60,13 @@ background watcher also opens it when an app starts even if the widget was close
   reads cookies or tokens. First use needs a one-time sign-in.
 - **Codex** (`codex_usage.py`) reads the rate-limit snapshot the Codex CLI writes
   locally under `~/.codex/sessions`. No browser, no login.
+
+Codex shows the general `codex` limit bucket (including older records with no
+limit ID), rather than substituting a model-specific limit. Each bar shows when
+the snapshot was recorded. Records older than five minutes or past their reset
+time are greyed out, marked `*`, and labelled stale. Pressing `↻` rereads local
+logs; using Codex again is needed to obtain a new server snapshot. Stale values
+are not assumed to have reset to zero.
 
 Neither calls a model, so checking usage consumes no quota.
 
@@ -139,6 +148,11 @@ auto-installs updates — it only checks and notifies, and you install manually.
 [`SECURITY.md`](SECURITY.md) for the full trust model, hardening, and how to report
 an issue.
 
+The localhost Origin restriction is not client authentication: other local
+programs can still attach to DevTools. Browser shutdown verifies process identity;
+old saved state without that identity is left untouched. If upgrading without
+reinstalling, close the old dedicated usage browser (or restart Windows) once.
+
 ### Project files
 
 | File | Purpose |
@@ -154,6 +168,18 @@ an issue.
 ### License
 
 MIT
+
+### Offline checks
+
+```cmd
+python -m unittest discover -s tests -v
+python codex_usage.py --self-test
+python usage.py --self-test
+```
+
+The regression suite uses synthetic logs and mocks. The last command starts a
+browser with a disposable profile for an offline DOM/protocol test; no Claude
+sign-in is used.
 
 ---
 
@@ -179,6 +205,14 @@ Claude와 Codex 사용량을 **한 위젯에서 함께** 작업표시줄 위에 
 - **Codex** (`codex_usage.py`): Codex CLI가 `~/.codex/sessions`에 남긴 rate-limit
   스냅샷을 로컬에서 읽습니다. 브라우저·로그인 불필요.
 
+Codex는 기본 `codex` 한도만 표시하며 모델별 한도로 대체하지 않습니다. 각 막대에
+실제 기록 시각이 표시됩니다. 5분이 지났거나 재설정 시각을 넘긴 기록은 회색과 `*`,
+`오래된 기록` 문구로 구분합니다. `↻`는 로컬 기록을 다시 읽으므로 새 서버 값을
+얻으려면 Codex를 다시 사용해야 합니다. 오래된 값을 임의로 0%로 바꾸지 않습니다.
+
+자동 모드에서 `×`나 트레이 메뉴로 숨기면 같은 앱이 실행 중인 동안 숨김이
+유지됩니다. 감시 대상 앱을 새로 열거나 다시 열면 위젯이 표시됩니다.
+
 모델을 호출하지 않으므로 사용량 확인으로 할당량이 소모되지 않습니다.
 
 ### 언어 (한국어 / English)
@@ -200,6 +234,11 @@ fetch`)하고, 새 버전이 있으면 헤더에 빨간 **`● 업데이트 필�
 컴퓨터에서 실행되지 않습니다. `CLAUDE_CODEX_NO_UPDATE=1` 또는 `.noupdate` 파일로
 확인 자체를 끌 수 있습니다. 전체 신뢰 모델·강화 내역·신고 방법은
 [`SECURITY.md`](SECURITY.md) 참고.
+
+localhost Origin 제한은 클라이언트 인증이 아니므로 같은 사용자 권한의 로컬
+프로그램은 DevTools에 접근할 수 있습니다. 브라우저 종료 시 프로세스 생성 시각과
+실행 파일을 확인하며, 이 정보가 없는 구버전 기록은 종료하지 않습니다. 재설치 없이
+업데이트했다면 기존 전용 사용량 브라우저를 닫거나 Windows를 한 번 재시작하세요.
 
 ### 요구 사항
 

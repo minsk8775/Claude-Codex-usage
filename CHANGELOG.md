@@ -3,6 +3,34 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [Unreleased]
+
+### Fixed
+- Verify browser executable and Windows process creation time before shutdown;
+  terminate the verified process handle so a reused PID cannot close another app.
+- Keep model-specific Codex limit buckets out of the general usage display.
+- Show the actual Codex snapshot time and mark expired or over-five-minute-old
+  values as stale instead of presenting them as current usage.
+- Preserve manual hiding while watched apps stay open, including background
+  watcher checks; reopen only when a watched app starts again.
+- Replay pending sync requests after completion using the latest view/language,
+  preserving manual sign-in intent. Failed readers no longer reuse a success cache.
+
+### Security
+- Restrict UDP control input to explicit external commands, discard oversized
+  packets and malformed bytes, and bound the UI event queue and processing batch.
+- Read log lines in bounded chunks; reject malformed event shapes, deeply nested
+  JSON and invalid numeric values without losing earlier valid snapshots.
+- Validate loopback DevTools endpoints, disallow HTTP redirects/proxies, verify
+  WebSocket ports, and bound HTTP/WebSocket response sizes.
+- Restrict update checks to the exact official origin and its `main` branch,
+  without fetching tags/submodules or executing downloaded code.
+- Correct the security documentation: a localhost Origin header is not client
+  authentication, and older browser state without process identity is not killed.
+
+### Tests
+- Add offline regression tests covering the fixes and untrusted input boundaries.
+
 ## [0.6.2] - 2026-09-02
 
 ### Fixed

@@ -33,6 +33,7 @@ Commands:
 import argparse
 import glob
 import json
+import math
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -55,6 +56,8 @@ SCAN_FILES = 24
 # token_count line is a few hundred bytes; this only guards against a corrupt
 # or hostile rollout with a huge blob exhausting memory on json.loads.
 MAX_LINE_CHARS = 2_000_000
+# A local snapshot cannot confirm usage after this much inactivity.
+STALE_SECONDS = 300
 
 
 class SyncError(Exception):
@@ -118,46 +121,58 @@ def recent_rollouts(home=None):
 
 def parse_time(value):
     """Best-effort parse of an ISO-8601 or epoch timestamp into epoch seconds."""
-    if isinstance(value, (int, float)):
-        return float(value)
-    if not isinstance(value, str) or not value.strip():
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
-    text = value.strip()
     try:
-        return float(text)
-    except ValueError:
-        pass
-    try:
-        if text.endswith("Z"):
-            text = text[:-1] + "+00:00"
-        return datetime.fromisoformat(text).timestamp()
-    except ValueError:
+        number = float(value)
+    except OverflowError:
         return None
+    except ValueError:
+        try:
+            number = datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
+        except (ValueError, OSError, OverflowError):
+            return None
+    try:
+        datetime.fromtimestamp(number, timezone.utc)
+    except (ValueError, OSError, OverflowError):
+        return None
+    return number
 
 
 def find_token_count(obj):
-    """Return the token_count payload inside a rollout line, or None.
-
-    Rollout schemas have shifted over releases (a raw payload, an ``event_msg``
-    wrapper, deeper nesting), so walk the structure instead of hard-coding a
-    single path.
-    """
-    stack = [obj]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, dict):
-            if node.get("type") == "token_count" and "rate_limits" in node:
-                return node
-            stack.extend(node.values())
-        elif isinstance(node, list):
-            stack.extend(node)
+    """Read actual events, not similarly-shaped data inside tool output."""
+    if not isinstance(obj, dict):
+        return None
+    node = obj.get("payload") if obj.get("type") == "event_msg" else obj
+    if isinstance(node, dict) and node.get("type") == "token_count":
+        return node
     return None
+
+
+def finite_number(value):
+    try:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def bounded_lines(handle):
+    """Discard oversized lines in bounded chunks, including their entire tail."""
+    while True:
+        line = handle.readline(MAX_LINE_CHARS + 1)
+        if not line:
+            return
+        if len(line) > MAX_LINE_CHARS:
+            while line and not line.endswith("\n"):
+                line = handle.readline(MAX_LINE_CHARS + 1)
+            continue
+        yield line
 
 
 def newest_snapshot(home=None):
     """Scan recent rollout files and return (rate_limits, event_epoch).
 
-    Keeps the event with the greatest timestamp whose rate_limits is not null.
+    Selects the general Codex bucket; unidentified legacy snapshots also qualify.
     """
     best = None  # (event_epoch, rate_limits)
     for path in recent_rollouts(home):
@@ -167,21 +182,27 @@ def newest_snapshot(home=None):
             file_epoch = 0.0
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
-                for line in handle:
-                    if len(line) > MAX_LINE_CHARS:
-                        continue
+                for line in bounded_lines(handle):
                     line = line.strip()
                     if not line or '"token_count"' not in line:
                         continue
                     try:
                         obj = json.loads(line)
-                    except ValueError:
+                    except (ValueError, RecursionError):
                         continue
                     payload = find_token_count(obj)
                     if not payload:
                         continue
                     limits = payload.get("rate_limits")
                     if not isinstance(limits, dict):
+                        continue
+                    if limits.get("limit_id") not in (None, "", "codex"):
+                        continue
+                    if not any(
+                        isinstance(limits.get(key), dict)
+                        and finite_number(limits[key].get("used_percent"))
+                        for key in ("primary", "secondary")
+                    ):
                         continue
                     when = (
                         parse_time(obj.get("timestamp"))
@@ -202,7 +223,7 @@ def window_label(minutes):
     en = LANG == "en"
     try:
         minutes = int(round(float(minutes)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return "Usage" if en else "사용량"
     table = {
         300: ("Current session", "현재 세션"),   # ~5 hours, short rolling window
@@ -232,11 +253,11 @@ def reset_at_epoch(window, event_epoch):
     ``resets_in_seconds`` measured from the event that carried it.
     """
     absolute = window.get("resets_at")
-    if isinstance(absolute, (int, float)) and absolute > 0:
-        return float(absolute)
+    if finite_number(absolute) and absolute > 0:
+        return parse_time(absolute)
     relative = window.get("resets_in_seconds")
-    if isinstance(relative, (int, float)) and relative >= 0 and event_epoch:
-        return float(event_epoch) + float(relative)
+    if finite_number(relative) and relative >= 0 and event_epoch:
+        return parse_time(float(event_epoch) + float(relative))
     return None
 
 
@@ -273,14 +294,26 @@ def make_bar(window, event_epoch, now_epoch=None):
     if not isinstance(window, dict):
         return None
     pct = window.get("used_percent")
-    if not isinstance(pct, (int, float)) or isinstance(pct, bool):
+    if not finite_number(pct):
         return None
     rounded = round(max(0.0, min(float(pct), 100.0)), 1)
+    now = now_epoch if now_epoch is not None else datetime.now(timezone.utc).timestamp()
+    reset = reset_at_epoch(window, event_epoch)
+    observed = parse_time(event_epoch)
+    stale = (observed is None or abs(now - observed) > STALE_SECONDS
+             or (reset is not None and reset <= now))
+    recorded = (datetime.fromtimestamp(observed, timezone.utc).astimezone().strftime("%m/%d %H:%M")
+                if observed is not None else "?")
+    if stale:
+        status = "Stale · refresh in Codex" if LANG == "en" else "오래된 기록 · Codex에서 갱신"
+    else:
+        status = human_reset(reset, now)
     return {
         "label": window_label(window.get("window_minutes")),
         "pct": rounded,
-        "pct_text": "%g%%" % rounded,
-        "sub": human_reset(reset_at_epoch(window, event_epoch), now_epoch),
+        "pct_text": ("%g%%" % rounded) + ("*" if stale else ""),
+        "sub": ("Recorded " if LANG == "en" else "기록 ") + recorded + "\n" + status,
+        "stale": stale,
     }
 
 
@@ -302,6 +335,8 @@ def make_payload(limits, event_epoch, now_epoch=None):
     payload = {
         "source": "codex-local",
         "synced_at": datetime.now(timezone.utc).isoformat(),
+        "observed_at": datetime.fromtimestamp(event_epoch, timezone.utc).isoformat(),
+        "limit_id": "codex",
         "bars": bars,
     }
     plan = limits.get("plan_type")
@@ -322,9 +357,9 @@ def sync_usage(home=None):
                 "Codex 세션 폴더를 찾지 못했습니다\nCodex CLI를 한 번 실행하세요"
             )
         raise SyncError(
-            "No Codex usage recorded yet\nSend one prompt with Codex"
+            "No general Codex usage recorded\nSend one prompt with Codex"
             if en else
-            "Codex 사용량 기록이 없습니다\nCodex로 프롬프트를 한 번 보내세요"
+            "Codex 기본 한도 기록이 없습니다\nCodex로 프롬프트를 한 번 보내세요"
         )
     return make_payload(limits, event_epoch)
 
@@ -367,14 +402,16 @@ def self_test():
         assert limits is not None, "snapshot not found"
         assert limits["plan_type"] == "pro"
         # Pin 'now' so the reset text is deterministic regardless of today.
-        now = 1000000000.0
+        now = event_epoch
+        limits["primary"]["resets_at"] = now + 2 * 3600
+        limits["secondary"]["resets_at"] = now + 19 * 3600
         payload = make_payload(limits, event_epoch, now_epoch=now)
         assert payload["bars"][0]["label"] == "현재 세션", payload["bars"][0]
         assert payload["bars"][1]["label"] == "주간 한도", payload["bars"][1]
         assert payload["bars"][0]["pct"] == 100.0
         assert payload["bars"][1]["pct"] == 69.0
-        assert payload["bars"][0]["sub"] == "2시간 후 재설정", payload["bars"][0]["sub"]
-        assert payload["bars"][1]["sub"] == "19시간 후 재설정", payload["bars"][1]["sub"]
+        assert payload["bars"][0]["sub"].endswith("2시간 후 재설정"), payload["bars"][0]["sub"]
+        assert payload["bars"][1]["sub"].endswith("19시간 후 재설정"), payload["bars"][1]["sub"]
         assert payload["plan_type"] == "pro"
 
         # Window-label fallbacks for durations without a friendly name.
@@ -384,7 +421,7 @@ def self_test():
         # Relative reset (older schema) resolves against the event time.
         rel = make_bar({"used_percent": 5, "window_minutes": 300,
                         "resets_in_seconds": 3600}, now, now_epoch=now)
-        assert rel["sub"] == "1시간 후 재설정", rel["sub"]
+        assert rel["sub"].endswith("1시간 후 재설정"), rel["sub"]
     print("Codex local usage self-test: OK")
 
 
