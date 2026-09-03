@@ -17,6 +17,14 @@ AUTO_FILE = STATE_DIR / "auto.enabled"
 PYTHONW_FILE = STATE_DIR / "pythonw.path"
 STARTUP = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\Startup"
 
+# This app's own control ports (keep in sync with claude_usage.pyw). The
+# installer stops the currently-running widget and watcher through these before
+# starting fresh copies, so re-running install.cmd always refreshes them to the
+# latest code (the watcher binds its port exclusively, so a stale one would
+# otherwise keep running and block the new one).
+APP_MAIN_PORT = 47671
+APP_WATCH_PORT = 47672
+
 # Older standalone widgets to stop and unregister so only this combined app
 # starts with Windows. Ports: claude-pet main/watch and codex-usage main.
 LEGACY_CONTROL_PORTS = (47651, 47652, 47661)
@@ -174,6 +182,13 @@ def main():
     stop_legacy_processes()
     for path in remove_legacy():
         print("Removed legacy:", path)
+    # Stop this app's own running widget and watcher so the fresh copies below
+    # run the latest code (the watcher holds its port exclusively).
+    _send_exit(APP_MAIN_PORT)
+    _send_exit(APP_WATCH_PORT)
+    import time as _time
+
+    _time.sleep(0.6)
     desktop = desktop_path()
     desktop_link = desktop / "Claude Codex Usage.lnk"
     legacy_link = desktop / "Claude Codex Usage Toggle.lnk"

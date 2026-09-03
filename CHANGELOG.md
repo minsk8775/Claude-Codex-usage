@@ -3,6 +3,21 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.6.2] - 2026-09-02
+
+### Fixed
+- **앱 실행 시 위젯 자동 표시가 안 되던 문제**: 감시자(watcher)가 갱신되지 않던
+  것이 원인이었습니다.
+  - `install.cmd`(install.py)가 **자기 앱의 기존 위젯·감시자를 먼저 종료**한 뒤
+    새로 띄우도록 수정. 이전에는 옛 감시자가 포트(47672)를 독점(EXCLUSIVEADDRUSE)해
+    새 감시자가 바인딩에 실패하고 죽어, `install.cmd`를 다시 돌려도 감시자가 옛
+    코드로 남아 있었습니다.
+  - 감시자가 시작 시 포트 바인딩을 **몇 초간 재시도**하도록 해, 재설치 중 포트가
+    풀리는 짧은 시간을 넘기고 반드시 뜨게 했습니다.
+  - Claude/ChatGPT 데스크톱 앱 감지를 정확한 exe 이름(`chatgpt.exe`) 대신
+    **부분 문자열(`claude`/`chatgpt`)** 매칭으로 바꿔, 빌드에 따라 실행 파일명이
+    달라도 감지되게 했습니다(더블클릭 앱 열기와 동일한 방식).
+
 ## [0.6.1] - 2026-09-02
 
 ### Fixed
@@ -104,6 +119,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.6.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.6.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.6.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.5.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

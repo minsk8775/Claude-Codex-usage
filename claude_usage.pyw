@@ -62,8 +62,12 @@ CLAUDE_SITE = "https://claude.ai/new"
 CODEX_SITE = "https://chatgpt.com/codex/settings/usage"
 # Opened in the browser when the user clicks the "update needed" badge.
 REPO_URL = "https://github.com/minsk8775/claude-codex-usage"
-# Process image names of the desktop apps the watcher opens the widget for.
-WATCHED_APP_EXES = ("claude.exe", "chatgpt.exe")
+# Substrings matched (case-insensitively) against a process image name to detect
+# the Claude / ChatGPT desktop apps, so the watcher can pop the widget up when one
+# launches. Substring (not exact "chatgpt.exe") so a differently-named build still
+# matches — the same approach the double-click app-open uses. pythonw.exe (this
+# widget) and node-based Claude Code do not contain these, so they never match.
+WATCHED_APP_NAMES = ("claude", "chatgpt")
 
 # The widget shows one page per source and flips between them with the on-screen
 # arrows. Each page reads its own latest.json and refreshes with its own script.
@@ -139,8 +143,8 @@ def tr(lang, key):
     if not entry:
         return key
     return entry.get(lang) or entry.get(DEFAULT_LANG) or key
-# Desktop-app process image name -> usage source key, for the auto view.
-APP_KEY_BY_EXE = {"claude.exe": "claude", "chatgpt.exe": "codex"}
+# Process-name substring -> usage source key, for the auto view (see above).
+APP_KEY_BY_NAME = (("claude", "claude"), ("chatgpt", "codex"))
 
 
 def log_error(value):
@@ -1788,7 +1792,8 @@ def watched_app_process_ids():
     try:
         success = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while success:
-            if entry.szExeFile.lower() in WATCHED_APP_EXES:
+            name = entry.szExeFile.lower()
+            if any(app in name for app in WATCHED_APP_NAMES):
                 result.add(int(entry.th32ProcessID))
             success = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
     finally:
@@ -1816,9 +1821,10 @@ def running_app_keys():
     try:
         success = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while success:
-            key = APP_KEY_BY_EXE.get(entry.szExeFile.lower())
-            if key:
-                keys.add(key)
+            name = entry.szExeFile.lower()
+            for app, key in APP_KEY_BY_NAME:
+                if app in name:
+                    keys.add(key)
             success = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
     finally:
         kernel32.CloseHandle(snapshot)
@@ -1838,9 +1844,17 @@ def start_main():
 
 
 def run_watcher():
-    try:
-        control = bind_control(WATCH_PORT)
-    except OSError:
+    # Retry the bind for a few seconds: when install.cmd restarts the watcher it
+    # first tells the old one to exit, and the port can take a moment to free.
+    control = None
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        try:
+            control = bind_control(WATCH_PORT)
+            break
+        except OSError:
+            time.sleep(0.5)
+    if control is None:
         return 0
     control.settimeout(2)
     known = set()
