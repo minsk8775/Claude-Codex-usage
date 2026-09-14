@@ -5,6 +5,13 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+- Claude "공식 사용량 동기화 실패 (timed out)" when idle: the reader reloaded the
+  usage page on every sync, and in the hidden window that reload could re-trigger
+  Cloudflare's check and hang. It now reuses an already-loaded page (refreshing in
+  place) instead of reloading, and retries the sync once so a cold first load can
+  self-recover.
+
 ## [0.7.0] - 2026-09-14
 
 ### Fixed

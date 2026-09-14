@@ -774,7 +774,15 @@ def wait_for_usage(devtools):
 def refresh_usage(devtools, navigate=True):
     devtools.call("Page.enable")
     if navigate:
-        devtools.call("Page.navigate", {"url": USAGE_URL})
+        # Reuse an already-loaded page instead of reloading it. A full navigate
+        # re-runs the page load — and in the hidden/off-screen window that can
+        # re-trigger Cloudflare's "verify you are human" check, which blocks the
+        # renderer and makes CDP calls time out on every idle sync. If the usage
+        # meters are already on the page, skip the navigate and just refresh in
+        # place (the button click below); only load the page when it isn't there.
+        current = read_page(devtools)
+        if len(current.get("meters") or []) < 2:
+            devtools.call("Page.navigate", {"url": USAGE_URL})
     data = wait_for_usage(devtools)
     clicked = devtools.evaluate(
         r"""
@@ -864,18 +872,29 @@ def make_payload(data):
 
 
 def sync_usage():
-    state = ensure_browser()
-    target = page_target(state["port"])
-    websocket_url = target.get("webSocketDebuggerUrl")
-    if not websocket_url:
-        raise SyncError("사용량 페이지에 연결하지 못했습니다")
-    devtools = DevTools(websocket_url, state["port"])
-    try:
-        payload = make_payload(refresh_usage(devtools))
-        atomic_json(READY, {"connected_at": payload["synced_at"]})
-        return payload
-    finally:
-        devtools.close()
+    # Try twice: a cold first load (browser just launched, Cloudflare check) can
+    # time out, and the second attempt reuses the now-warm browser and its
+    # already-loaded page, so it usually succeeds. NeedsLogin is not retried.
+    last_error = None
+    for attempt in range(2):
+        state = ensure_browser()
+        target = page_target(state["port"])
+        websocket_url = target.get("webSocketDebuggerUrl")
+        if not websocket_url:
+            raise SyncError("사용량 페이지에 연결하지 못했습니다")
+        devtools = DevTools(websocket_url, state["port"])
+        try:
+            payload = make_payload(refresh_usage(devtools))
+            atomic_json(READY, {"connected_at": payload["synced_at"]})
+            return payload
+        except NeedsLogin:
+            raise
+        except (socket.timeout, SyncError, OSError) as error:
+            last_error = error
+        finally:
+            devtools.close()
+        time.sleep(1.0)
+    raise last_error
 
 
 def close_browser():
