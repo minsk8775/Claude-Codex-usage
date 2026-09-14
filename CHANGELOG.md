@@ -6,6 +6,12 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 ## [Unreleased]
 
 ### Fixed
+- Fix Claude "공식 사용량 동기화 실패 (timed out)": the off-screen reader window was
+  throttled by Chrome (background/occluded renderer), stalling the Claude SPA and
+  its Cloudflare check so CDP calls timed out. Add anti-throttle launch flags
+  (`--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`,
+  `--disable-renderer-backgrounding`) and raise the CDP socket timeout 10s → 25s
+  for cold loads.
 - Verify browser executable and Windows process creation time before shutdown;
   terminate the verified process handle so a reused PID cannot close another app.
 - Keep model-specific Codex limit buckets out of the general usage display.

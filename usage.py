@@ -402,6 +402,13 @@ def browser_flags(port, profile, visible):
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-background-mode",
+        # The hidden reader window is off-screen/occluded, and Chrome heavily
+        # throttles background/occluded renderers — that stalled the Claude SPA
+        # (and its Cloudflare check) so CDP calls timed out ("timed out"). Keep
+        # the renderer at full speed even while hidden.
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
     ]
     if visible:
         flags.extend(["--new-window", USAGE_URL])
@@ -508,7 +515,11 @@ def page_target(port):
 class WebSocket:
     """Tiny RFC 6455 client, sufficient for the local Chrome DevTools socket."""
 
-    def __init__(self, url, timeout=10):
+    def __init__(self, url, timeout=25):
+        # 25s (was 10s): a cold page load — first launch, Cloudflare check, a
+        # slow SPA render — can keep a single CDP call waiting a while before it
+        # answers. The anti-throttle flags make this rare; the headroom stops a
+        # slow first sync from hard-failing with "timed out".
         parsed = loopback_url(url, "ws")
         self.socket = socket.create_connection((parsed.hostname, parsed.port), timeout)
         self.socket.settimeout(timeout)
