@@ -3,10 +3,9 @@
 [English](#english) · [한국어](#한국어)
 
 A small always-on-top Windows widget that shows **Claude and Codex usage
-together** just above the taskbar. It combines
-[`claude-usage`](https://github.com/minsk8775/claude-usage) (Claude) and
-[`codex-usage`](https://github.com/minsk8775/codex-usage) (Codex) into one widget
-with four view modes.
+together** just above the taskbar, in one widget with five view modes (including
+an automatic one). It began as two standalone tools (Claude-only and Codex-only)
+that were merged here.
 
 ```text
 ┌──────────────────────────┐
@@ -186,9 +185,8 @@ sign-in is used.
 ## 한국어
 
 Claude와 Codex 사용량을 **한 위젯에서 함께** 작업표시줄 위에 보여주는 Windows용
-도구입니다. [`claude-usage`](https://github.com/minsk8775/claude-usage)(Claude)와
-[`codex-usage`](https://github.com/minsk8775/codex-usage)(Codex)를 하나로 합쳐
-네 가지 보기 모드를 제공합니다.
+도구입니다. 다섯 가지 보기 모드(자동 포함)를 제공하며, 원래 Claude 전용·Codex
+전용 두 도구로 시작해 이 앱으로 합쳐졌습니다.
 
 ### 보기 모드
 
