@@ -85,6 +85,12 @@ SOURCES = (
 )
 SOURCE_BY_KEY = {source["key"]: source for source in SOURCES}
 
+
+def bar_cap(key):
+    """Max bars a source may draw. Codex can show two buckets (general + a
+    model-specific one like Spark), so it needs room for four; Claude has two."""
+    return 4 if key == "codex" else 2
+
 # View modes, chosen from the notification-icon right-click menu:
 #   auto         - follow which apps are running: one open -> that one only,
 #                  both open -> both stacked (default)
@@ -105,6 +111,7 @@ MODE_MENU = (
 MODE_BY_ID = {menu_id: mode for menu_id, mode, _key in MODE_MENU}
 LANG_KO_ID = 3000
 LANG_EN_ID = 3001
+SPARK_TOGGLE_ID = 1004
 
 # UI language. The widget chrome, the update badge and the two reader scripts
 # (via a --lang flag) all follow this. Default Korean; switch in the right-click
@@ -123,6 +130,7 @@ STRINGS = {
     "mode_both_stacked": {"ko": "둘 다 보기", "en": "Both (stacked)"},
     "mode_both_paged": {"ko": "둘 다 (좌우 전환)", "en": "Both (arrows)"},
     "always_on_top": {"ko": "항상 위 (Always on top)", "en": "Always on top"},
+    "show_spark": {"ko": "Codex Spark 사용량도 표시", "en": "Also show Codex Spark usage"},
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
     "exit": {"ko": "종료", "en": "Exit"},
     "language": {"ko": "언어 (Language)", "en": "Language"},
@@ -367,6 +375,7 @@ class TrayIcon:
         self.current_mode = DEFAULT_MODE
         self.current_on_top = True
         self.current_lang = DEFAULT_LANG
+        self.current_show_spark = False
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
@@ -417,6 +426,13 @@ class TrayIcon:
             self.MF_BYCOMMAND
             | (self.MF_CHECKED if self.current_on_top else self.MF_UNCHECKED),
         )
+        user32.AppendMenuW(menu, self.MF_STRING, SPARK_TOGGLE_ID, tr(lang, "show_spark"))
+        user32.CheckMenuItem(
+            menu,
+            SPARK_TOGGLE_ID,
+            self.MF_BYCOMMAND
+            | (self.MF_CHECKED if self.current_show_spark else self.MF_UNCHECKED),
+        )
         # Language submenu (Korean / English) as a radio group.
         lang_menu = user32.CreatePopupMenu()
         user32.AppendMenuW(lang_menu, self.MF_STRING, LANG_KO_ID, tr(lang, "lang_ko"))
@@ -449,6 +465,8 @@ class TrayIcon:
             self.events.put(("exit", None))
         elif command == 1003:
             self.events.put(("toggle_ontop", None))
+        elif command == SPARK_TOGGLE_ID:
+            self.events.put(("toggle_spark", None))
         elif command == LANG_KO_ID:
             self.events.put(("lang", "ko"))
         elif command == LANG_EN_ID:
@@ -860,6 +878,9 @@ class UsageApp:
         lang = settings.get("lang", DEFAULT_LANG)
         self.lang = lang if lang in LANGS else DEFAULT_LANG
         self.on_top = bool(settings.get("on_top", True))
+        # Codex model-specific (Spark) buckets are hidden by default; the general
+        # account limit is what most users track. Toggle in the right-click menu.
+        self.show_spark = bool(settings.get("show_spark", False))
         self.app_ids = set()  # installed app AUMIDs; filled in the background
         self.auto_view = "both_stacked"  # effective view when mode == "auto"
         self._known_app_keys = set()
@@ -911,6 +932,7 @@ class UsageApp:
         self.mode_var = tk.StringVar(master=self.root, value=self.mode)
         self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
         self.lang_var = tk.StringVar(master=self.root, value=self.lang)
+        self.spark_var = tk.BooleanVar(master=self.root, value=self.show_spark)
         try:
             self._known_app_keys = running_app_keys()
         except Exception:
@@ -942,6 +964,7 @@ class UsageApp:
         self.tray.current_mode = self.mode
         self.tray.current_on_top = self.on_top
         self.tray.current_lang = self.lang
+        self.tray.current_show_spark = self.show_spark
         self.tray.start()
         self.listener = threading.Thread(target=self._listen, daemon=True)
         self.listener.start()
@@ -1047,6 +1070,8 @@ class UsageApp:
                 self._set_lang(payload)
             elif action == "toggle_ontop":
                 self._toggle_on_top()
+            elif action == "toggle_spark":
+                self._toggle_spark()
             elif action == "sync_result":
                 key, data = payload
                 self.datas[key] = data
@@ -1103,7 +1128,8 @@ class UsageApp:
                 break
             key = source["key"]
             try:
-                result = run_script(source["script"], "--sync", "--lang", lang)
+                extra = ["--spark", "on" if self.show_spark else "off"] if key == "codex" else []
+                result = run_script(source["script"], "--sync", "--lang", lang, *extra)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)
@@ -1206,6 +1232,14 @@ class UsageApp:
             self.root.lift()
         self._save_settings()
 
+    def _toggle_spark(self):
+        self.show_spark = not self.show_spark
+        self.tray.current_show_spark = self.show_spark
+        self.spark_var.set(self.show_spark)
+        self._save_settings()
+        # Re-sync Codex so its reader rebuilds the bars for the new setting.
+        self.start_sync(False)
+
     def _load_latest(self, source=None):
         source = source or self._source()
         try:
@@ -1240,6 +1274,7 @@ class UsageApp:
                         "mode": self.mode,
                         "on_top": self.on_top,
                         "lang": self.lang,
+                        "show_spark": self.show_spark,
                     }
                 ),
                 encoding="utf-8",
@@ -1267,7 +1302,7 @@ class UsageApp:
         )
 
     def _measure(self):
-        bars = (self.data.get("bars") or [])[:2]
+        bars = (self.data.get("bars") or [])[:bar_cap(self._source()["key"])]
         if bars and not self.data.get("error"):
             base_height = self.ROW_TOP + (len(bars) - 1) * self.ROW_STEP + self.ROW_BOTTOM
         else:
@@ -1473,7 +1508,7 @@ class UsageApp:
                 height += self.STACK_GAP
             height += self.STACK_SECTION
             data = self.datas.get(source["key"]) or {}
-            bars = (data.get("bars") or [])[:2]
+            bars = (data.get("bars") or [])[:bar_cap(source["key"])]
             if bars and not data.get("error"):
                 height += self.STACK_BAR * len(bars)
             else:
@@ -1502,7 +1537,7 @@ class UsageApp:
             )
             row += self.STACK_SECTION
             data = self.datas.get(source["key"]) or {}
-            bars = (data.get("bars") or [])[:2]
+            bars = (data.get("bars") or [])[:bar_cap(source["key"])]
             if bars and not data.get("error"):
                 for bar in bars:
                     self._draw_bar(pad, self._s(row + 10), bar)
@@ -1642,6 +1677,12 @@ class UsageApp:
             label=self._t("always_on_top"),
             variable=self.on_top_var,
             command=self._toggle_on_top,
+        )
+        self.spark_var.set(self.show_spark)
+        menu.add_checkbutton(
+            label=self._t("show_spark"),
+            variable=self.spark_var,
+            command=self._toggle_spark,
         )
         # Language submenu (Korean / English).
         self.lang_var.set(self.lang)

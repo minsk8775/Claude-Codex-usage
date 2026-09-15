@@ -53,21 +53,31 @@ class CodexTests(unittest.TestCase):
     def write(self, *rows):
         self.rollout.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
-    def test_fresher_model_bucket_is_shown(self):
-        # The freshest bucket wins so the widget tracks the model actually in
-        # use now, instead of freezing on a stale general value (the real bug:
-        # heavy Codex-Spark use while the general bucket sat ~25h old).
-        self.write(self.event(age=2), self.event(2, "codex_bengalfox", age=1))
+    def test_spark_off_prefers_the_active_general_bucket(self):
+        # Default (Spark off): while the general bucket is active it is shown
+        # alone, even next to a model bucket that is also fresh.
+        self.write(self.event(85, age=2), self.event(2, "codex_bengalfox", age=1))
+        payload = codex.sync_usage(str(self.home))
+        self.assertEqual(len(payload["bars"]), 1)
+        self.assertEqual(payload["bars"][0]["pct"], 85)
+        self.assertEqual(payload["limit_id"], "codex")
+
+    def test_spark_off_falls_back_to_model_when_general_is_stale(self):
+        # The real bug: heavy Codex-Spark use while the general bucket sat ~25h
+        # old. Off mode must not freeze on it — it shows the fresh model bucket.
+        self.write(self.event(85, age=100000), self.event(2, "codex_bengalfox", age=1))
         payload = codex.sync_usage(str(self.home))
         self.assertEqual(payload["bars"][0]["pct"], 2)
         self.assertEqual(payload["limit_id"], "codex_bengalfox")
         self.assertTrue(payload["bars"][0]["label"].endswith("bengalfox"))
 
-    def test_general_bucket_wins_when_it_is_freshest(self):
-        self.write(self.event(2, "codex_bengalfox", age=2), self.event(85, age=1))
-        payload = codex.sync_usage(str(self.home))
-        self.assertEqual(payload["bars"][0]["pct"], 85)
-        self.assertEqual(payload["limit_id"], "codex")
+    def test_spark_on_shows_both_active_buckets(self):
+        self.write(self.event(85, age=2), self.event(2, "codex_bengalfox", age=1))
+        payload = codex.sync_usage(str(self.home), show_spark=True)
+        self.assertEqual(len(payload["bars"]), 2)
+        self.assertEqual(payload["bars"][0]["pct"], 85)      # general first
+        self.assertEqual(payload["bars"][1]["pct"], 2)       # model second
+        self.assertTrue(payload["bars"][1]["label"].endswith("bengalfox"))
 
     def test_model_only_usage_is_shown_with_a_tag(self):
         self.write(self.event(2, "codex_bengalfox"))
@@ -234,6 +244,7 @@ class WidgetTests(unittest.TestCase):
         app.syncing = False
         app.pending_sync = None
         app.lang = "ko"
+        app.show_spark = False
         app.datas = {"claude": {}, "codex": {"error": "no cache"}}
         app.data = {}
         app.tray = Mock()
@@ -336,6 +347,25 @@ class WidgetTests(unittest.TestCase):
             app._sync_worker([widget.SOURCE_BY_KEY["codex"]], False, "en")
         app._load_latest.assert_not_called()
         self.assertIn("error", app.events.get_nowait()[1][1])
+
+    def test_codex_reader_receives_the_spark_setting(self):
+        for enabled, flag in ((False, "off"), (True, "on")):
+            app = self.app()
+            app.show_spark = enabled
+            app._load_latest = Mock(return_value={"bars": []})
+            with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
+                app._sync_worker([widget.SOURCE_BY_KEY["codex"]], False, "en")
+            args = run.call_args.args
+            self.assertIn("--spark", args)
+            self.assertEqual(args[args.index("--spark") + 1], flag)
+
+    def test_claude_reader_is_not_passed_the_spark_flag(self):
+        app = self.app()
+        app.show_spark = True
+        app._load_latest = Mock(return_value={"bars": []})
+        with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
+            app._sync_worker([widget.SOURCE_BY_KEY["claude"]], False, "en")
+        self.assertNotIn("--spark", run.call_args.args)
 
     def test_watcher_survives_oversized_packets_and_uses_app_transitions(self):
         control = Mock()

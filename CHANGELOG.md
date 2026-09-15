@@ -5,14 +5,22 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+- **Codex Spark 사용량 표시 토글**: 우클릭·알림 아이콘 메뉴에 **`Codex Spark
+  사용량도 표시`** 추가 (기본 **꺼짐**).
+  - **꺼짐(기본):** 일반 codex 한도(현재 세션·주간)만 표시.
+  - **켜짐:** 실제로 사용 중인 버킷을 모두 표시 — 일반만 쓰면 일반, Spark만 쓰면
+    Spark, **둘 다 쓰면 둘 다** (모델 버킷은 `현재 세션 · Spark`처럼 라벨에 모델
+    태그가 붙어 계정 전체 한도와 구분됩니다).
+  - "사용 중"은 각 버킷의 최신 기록이 해당 세션 창(기본 5시간) 안에 있는지로 판단.
+
 ### Fixed
 - **Codex 사용량이 갱신되지 않던 문제**: `0.7.0`에서 "모델별 버킷 제외" 필터가
   일반(`codex`) 버킷만 표시하도록 했는데, GPT-5.3-Codex-Spark처럼 **모델별 한도만
   실제로 쓰는 경우** 일반 버킷이 갱신되지 않아(예: 25시간 전 값) 위젯이 낡은 값에
-  멈춰 "오래된 기록"으로 표시됐습니다. 이제 **가장 최신(=지금 실제 사용 중인)
-  버킷을 표시**하고, 모델별 버킷이면 라벨에 짧은 모델 태그(예: `현재 세션 · Spark`)를
-  붙여 계정 전체 한도와 구분합니다. 일반 모델을 쓰면 일반 버킷이, Spark를 쓰면 Spark
-  버킷이 자동으로 최신으로 뜹니다.
+  멈춰 "오래된 기록"으로 표시됐습니다. 이제 Spark가 꺼져 있어도 **일반 버킷이 오래됐고
+  Spark만 쓰는 중이면 Spark를 자동으로 표시**해, 실제 사용 중인 한도가 항상 최신으로
+  보이고 멈춘 것처럼 보이지 않습니다.
 - Claude "공식 사용량 동기화 실패 (timed out)" when idle: the reader reloaded the
   usage page on every sync, and in the hidden window that reload could re-trigger
   Cloudflare's check and hang. It now reuses an already-loaded page (refreshing in

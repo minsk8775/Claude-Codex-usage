@@ -108,11 +108,21 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Sync now | Click `↻` |
 | Hide / show | Click `×`, or left-click the notification icon |
 | Always on top on/off | Right-click the notification icon → `Always on top` |
+| Show Codex Spark usage | Right-click anywhere (or the notification icon) → `Also show Codex Spark usage` (off by default) |
 | Language (KO/EN) | Right-click anywhere (or the notification icon) → `Language` → `한국어` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
 
 Percent is **used** (the bar fills as you consume quota). A moved widget keeps
 its bottom edge fixed when the height changes between modes.
+
+Codex reports usage per model. By default the widget shows only your general
+Codex limit (current session + weekly). Turn on **Also show Codex Spark usage**
+to also see model-specific buckets (e.g. GPT-5.3-Codex-Spark): the general
+bucket and the model bucket then show together when both are in use, each
+model bucket tagged in its label (e.g. `Current session · Spark`). Even with the
+toggle off, if your general limit is stale because you have only been using a
+model bucket, that model bucket is shown so the widget never freezes on an old
+value.
 
 The interface ships in **Korean and English**; switch under the right-click
 `Language` submenu. The choice is saved. (Claude's own reset text is read from
@@ -276,11 +286,19 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 즉시 동기화 | `↻` |
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |
 | 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
+| Codex Spark 표시 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex Spark 사용량도 표시` (기본 꺼짐) |
 | 언어 (한/영) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `언어 (Language)` → `한국어` / `English` |
 | 완전 종료 | 알림 아이콘 우클릭 → `종료` |
 
 퍼센트는 **사용량 기준**(쓸수록 막대가 참)입니다. 창을 옮겨 둔 경우, 모드에 따라
 높이가 바뀌어도 아래 모서리가 고정됩니다.
+
+Codex는 모델별로 사용량을 따로 보고합니다. 기본값은 **일반 Codex 한도(현재 세션 +
+주간)만** 표시하고, **`Codex Spark 사용량도 표시`** 를 켜면 모델별 버킷(예:
+GPT-5.3-Codex-Spark)도 함께 보입니다 — 일반과 모델 버킷을 둘 다 쓰면 둘 다 뜨며,
+모델 버킷은 라벨에 태그가 붙습니다(예: `현재 세션 · Spark`). 토글이 꺼져 있어도
+일반 한도가 오래됐고 모델 버킷만 쓰는 중이면 그 모델 버킷을 표시해, 위젯이 낡은
+값에 멈춰 보이지 않습니다.
 
 ### 파일 구성
 

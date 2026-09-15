@@ -169,16 +169,22 @@ def bounded_lines(handle):
         yield line
 
 
-def newest_snapshot(home=None):
-    """Scan recent rollout files and return (rate_limits, event_epoch).
+def bucket_group(limits):
+    """'general' for the account-wide codex bucket, 'model' for a per-model one."""
+    return "general" if limits.get("limit_id") in (None, "", "codex") else "model"
 
-    Returns the freshest usable snapshot regardless of which limit bucket it
-    belongs to, so the display tracks the model the user is actually using
-    right now (general Codex, a model-specific bucket like Codex-Spark, ...).
-    Earlier code kept only the general ``codex`` bucket, which froze the widget
-    on a stale value whenever the user worked in a model-specific bucket.
+
+def collect_buckets(home=None):
+    """Scan recent rollout files and return the newest usable snapshot per group.
+
+    Returns ``{group: (event_epoch, rate_limits)}`` where group is 'general'
+    (the account-wide ``codex`` bucket, plus legacy snapshots without a
+    limit_id) or 'model' (the newest model-specific bucket, e.g. limit_id
+    ``codex_bengalfox`` / "GPT-5.3-Codex-Spark"). Tracking them separately lets
+    the widget show the general limit, the model limit, or both, and never
+    freezes on a stale general value while the user works in a model bucket.
     """
-    best = None  # (event_epoch, rate_limits)
+    groups = {}  # group -> (event_epoch, rate_limits)
     for path in recent_rollouts(home):
         try:
             file_epoch = os.path.getmtime(path)
@@ -211,13 +217,22 @@ def newest_snapshot(home=None):
                         or parse_time(payload.get("timestamp"))
                         or file_epoch
                     )
-                    if best is None or when >= best[0]:
-                        best = (when, limits)
+                    group = bucket_group(limits)
+                    current = groups.get(group)
+                    if current is None or when >= current[0]:
+                        groups[group] = (when, limits)
         except OSError:
             continue
-    if best is None:
+    return groups
+
+
+def newest_snapshot(home=None):
+    """Return the freshest usable snapshot (rate_limits, event_epoch) overall."""
+    groups = collect_buckets(home)
+    if not groups:
         return None, None
-    return best[1], best[0]
+    when, limits = max(groups.values(), key=lambda item: item[0])
+    return limits, when
 
 
 def window_label(minutes):
@@ -374,10 +389,59 @@ def make_payload(limits, event_epoch, now_epoch=None):
     return payload
 
 
-def sync_usage(home=None):
+def bucket_active(limits, event_epoch, now_epoch):
+    """True when a bucket was used recently enough to still reflect live usage.
+
+    We treat a bucket as active while its newest snapshot is no older than its
+    own primary (session) window — a bucket you stopped using rolls off once its
+    window would have reset. That lets "show only what you're using" work: the
+    general bucket drops out when you work exclusively in a model bucket.
+    """
+    if not isinstance(limits, dict) or event_epoch is None:
+        return False
+    window_min = 300.0
+    primary = limits.get("primary")
+    if isinstance(primary, dict) and finite_number(primary.get("window_minutes")):
+        window_min = max(15.0, float(primary["window_minutes"]))
+    return (now_epoch - float(event_epoch)) <= window_min * 60.0
+
+
+def select_groups(general, model, show_spark, now_epoch):
+    """Decide which bucket groups to display, each as ``(limits, event_epoch)``.
+
+    - Spark off (default): show the general bucket; if it is not active but a
+      model bucket is, show that instead so the widget never freezes on a stale
+      general value.
+    - Spark on: show every active bucket (general and/or model) — both when both
+      are in use.
+    In every case, if nothing is active, fall back to the freshest available so
+    there is always something to show.
+    """
+    general_active = general is not None and bucket_active(general[0], general[1], now_epoch)
+    model_active = model is not None and bucket_active(model[0], model[1], now_epoch)
+    selected = []
+    if show_spark:
+        if general_active:
+            selected.append(general)
+        if model_active:
+            selected.append(model)
+    else:
+        if general_active:
+            selected.append(general)
+        elif model_active:
+            selected.append(model)
+    if not selected:
+        available = [item for item in (general, model) if item is not None]
+        if available:
+            selected = [max(available, key=lambda item: item[1])]
+    return selected
+
+
+def sync_usage(home=None, show_spark=False):
     en = LANG == "en"
-    limits, event_epoch = newest_snapshot(home)
-    if limits is None:
+    now = datetime.now(timezone.utc).timestamp()
+    groups = collect_buckets(home)
+    if not groups:
         root = sessions_dir(home)
         if not os.path.isdir(root):
             raise SyncError(
@@ -390,7 +454,22 @@ def sync_usage(home=None):
             if en else
             "Codex 사용량 기록이 없습니다\nCodex로 프롬프트를 한 번 보내세요"
         )
-    return make_payload(limits, event_epoch)
+    # collect_buckets stores (event_epoch, limits); make_payload wants
+    # (limits, event_epoch).
+    general = (groups["general"][1], groups["general"][0]) if "general" in groups else None
+    model = (groups["model"][1], groups["model"][0]) if "model" in groups else None
+    selected = select_groups(general, model, show_spark, now)
+
+    payload = None
+    for limits, event_epoch in selected:
+        part = make_payload(limits, event_epoch, now_epoch=now)
+        if payload is None:
+            payload = part
+        else:
+            payload["bars"].extend(part["bars"])
+            if "bucket_name" not in payload and "bucket_name" in part:
+                payload["bucket_name"] = part["bucket_name"]
+    return payload
 
 
 FIXTURE_LINES = [
@@ -490,6 +569,7 @@ def main():
     group.add_argument("--sync", action="store_true")
     group.add_argument("--self-test", action="store_true")
     parser.add_argument("--lang", choices=("ko", "en"), default="ko")
+    parser.add_argument("--spark", choices=("on", "off"), default="off")
     args = parser.parse_args()
     LANG = args.lang
 
@@ -498,7 +578,7 @@ def main():
         return
 
     try:
-        emit(sync_usage())
+        emit(sync_usage(show_spark=(args.spark == "on")))
     except SyncError as error:
         emit({"code": "sync_failed", "error": str(error)})
     except (OSError, ValueError) as error:
