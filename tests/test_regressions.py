@@ -245,6 +245,7 @@ class WidgetTests(unittest.TestCase):
         app.pending_sync = None
         app.lang = "ko"
         app.show_spark = False
+        app.codex_source = "web"
         app.datas = {"claude": {}, "codex": {"error": "no cache"}}
         app.data = {}
         app.tray = Mock()
@@ -348,16 +349,29 @@ class WidgetTests(unittest.TestCase):
         app._load_latest.assert_not_called()
         self.assertIn("error", app.events.get_nowait()[1][1])
 
-    def test_codex_reader_receives_the_spark_setting(self):
+    def test_local_codex_reader_receives_the_spark_setting(self):
         for enabled, flag in ((False, "off"), (True, "on")):
             app = self.app()
+            app.codex_source = "local"
             app.show_spark = enabled
             app._load_latest = Mock(return_value={"bars": []})
             with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
                 app._sync_worker([widget.SOURCE_BY_KEY["codex"]], False, "en")
             args = run.call_args.args
+            self.assertIs(args[0], widget.CODEX_SCRIPT)
             self.assertIn("--spark", args)
             self.assertEqual(args[args.index("--spark") + 1], flag)
+
+    def test_web_codex_source_uses_the_browser_reader_without_spark(self):
+        app = self.app()
+        app.codex_source = "web"
+        app.show_spark = True
+        app._load_latest = Mock(return_value={"bars": []})
+        with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
+            app._sync_worker([widget.SOURCE_BY_KEY["codex"]], False, "en")
+        args = run.call_args.args
+        self.assertIs(args[0], widget.CODEX_WEB_SCRIPT)
+        self.assertNotIn("--spark", args)
 
     def test_claude_reader_is_not_passed_the_spark_flag(self):
         app = self.app()

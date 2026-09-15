@@ -25,6 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 LATEST = BASE_DIR / "latest.json"
 CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
+CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
 CODEX_LATEST = BASE_DIR / "codex_latest.json"
 ERROR_LOG = BASE_DIR / "error.log"
 ICON_PATH = BASE_DIR / "assets" / "claude-usage.ico"
@@ -50,7 +51,7 @@ STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
 MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
-UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py", "install.py", "install.cmd")
+UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py", "codex_web.py", "install.py", "install.cmd")
 CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "hide", "toggle", "exit")}
 
 # The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
@@ -112,6 +113,12 @@ MODE_BY_ID = {menu_id: mode for menu_id, mode, _key in MODE_MENU}
 LANG_KO_ID = 3000
 LANG_EN_ID = 3001
 SPARK_TOGGLE_ID = 1004
+# Codex data source: the official ChatGPT usage page (browser) or the local
+# Codex CLI logs. Browser sees app/web usage too; local needs no login.
+CODEX_SOURCES = ("web", "local")
+DEFAULT_CODEX_SOURCE = "web"
+CODEX_SRC_WEB_ID = 3100
+CODEX_SRC_LOCAL_ID = 3101
 
 # UI language. The widget chrome, the update badge and the two reader scripts
 # (via a --lang flag) all follow this. Default Korean; switch in the right-click
@@ -131,6 +138,9 @@ STRINGS = {
     "mode_both_paged": {"ko": "둘 다 (좌우 전환)", "en": "Both (arrows)"},
     "always_on_top": {"ko": "항상 위 (Always on top)", "en": "Always on top"},
     "show_spark": {"ko": "Codex Spark 사용량도 표시", "en": "Also show Codex Spark usage"},
+    "codex_source": {"ko": "Codex 데이터 소스", "en": "Codex data source"},
+    "codex_source_web": {"ko": "공식 페이지 (브라우저)", "en": "Official page (browser)"},
+    "codex_source_local": {"ko": "로컬 CLI 기록", "en": "Local CLI log"},
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
     "exit": {"ko": "종료", "en": "Exit"},
     "language": {"ko": "언어 (Language)", "en": "Language"},
@@ -376,6 +386,7 @@ class TrayIcon:
         self.current_on_top = True
         self.current_lang = DEFAULT_LANG
         self.current_show_spark = False
+        self.current_codex_source = DEFAULT_CODEX_SOURCE
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
@@ -442,6 +453,16 @@ class TrayIcon:
             LANG_EN_ID if lang == "en" else LANG_KO_ID, self.MF_BYCOMMAND,
         )
         user32.AppendMenuW(menu, self.MF_POPUP, lang_menu, tr(lang, "language"))
+        # Codex data source submenu (official browser page / local CLI log).
+        codex_menu = user32.CreatePopupMenu()
+        user32.AppendMenuW(codex_menu, self.MF_STRING, CODEX_SRC_WEB_ID, tr(lang, "codex_source_web"))
+        user32.AppendMenuW(codex_menu, self.MF_STRING, CODEX_SRC_LOCAL_ID, tr(lang, "codex_source_local"))
+        user32.CheckMenuRadioItem(
+            codex_menu, CODEX_SRC_WEB_ID, CODEX_SRC_LOCAL_ID,
+            CODEX_SRC_LOCAL_ID if self.current_codex_source == "local" else CODEX_SRC_WEB_ID,
+            self.MF_BYCOMMAND,
+        )
+        user32.AppendMenuW(menu, self.MF_POPUP, codex_menu, tr(lang, "codex_source"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
         user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
@@ -471,6 +492,10 @@ class TrayIcon:
             self.events.put(("lang", "ko"))
         elif command == LANG_EN_ID:
             self.events.put(("lang", "en"))
+        elif command == CODEX_SRC_WEB_ID:
+            self.events.put(("codex_source", "web"))
+        elif command == CODEX_SRC_LOCAL_ID:
+            self.events.put(("codex_source", "local"))
         elif command in MODE_BY_ID:
             self.events.put(("mode", MODE_BY_ID[command]))
 
@@ -881,6 +906,10 @@ class UsageApp:
         # Codex model-specific (Spark) buckets are hidden by default; the general
         # account limit is what most users track. Toggle in the right-click menu.
         self.show_spark = bool(settings.get("show_spark", False))
+        # Codex data source: the official ChatGPT usage page (browser, sees
+        # app/web usage) by default, or the local Codex CLI log (no login).
+        codex_source = settings.get("codex_source", DEFAULT_CODEX_SOURCE)
+        self.codex_source = codex_source if codex_source in CODEX_SOURCES else DEFAULT_CODEX_SOURCE
         self.app_ids = set()  # installed app AUMIDs; filled in the background
         self.auto_view = "both_stacked"  # effective view when mode == "auto"
         self._known_app_keys = set()
@@ -933,6 +962,7 @@ class UsageApp:
         self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
         self.lang_var = tk.StringVar(master=self.root, value=self.lang)
         self.spark_var = tk.BooleanVar(master=self.root, value=self.show_spark)
+        self.codex_source_var = tk.StringVar(master=self.root, value=self.codex_source)
         try:
             self._known_app_keys = running_app_keys()
         except Exception:
@@ -965,6 +995,7 @@ class UsageApp:
         self.tray.current_on_top = self.on_top
         self.tray.current_lang = self.lang
         self.tray.current_show_spark = self.show_spark
+        self.tray.current_codex_source = self.codex_source
         self.tray.start()
         self.listener = threading.Thread(target=self._listen, daemon=True)
         self.listener.start()
@@ -1072,6 +1103,8 @@ class UsageApp:
                 self._toggle_on_top()
             elif action == "toggle_spark":
                 self._toggle_spark()
+            elif action == "codex_source":
+                self._set_codex_source(payload)
             elif action == "sync_result":
                 key, data = payload
                 self.datas[key] = data
@@ -1119,6 +1152,19 @@ class UsageApp:
             target=self._sync_worker, args=(sources, manual, self.lang), daemon=True
         ).start()
 
+    def _reader_for(self, source):
+        """(script, needs_connect, extra_args) for a source's reader.
+
+        Codex has two readers: the browser reader (official page, sees app/web
+        usage, needs a ChatGPT login) and the local CLI-log reader (no login,
+        honours the Spark toggle). Everything else uses its fixed script.
+        """
+        if source["key"] == "codex":
+            if self.codex_source == "web":
+                return CODEX_WEB_SCRIPT, True, []
+            return CODEX_SCRIPT, False, ["--spark", "on" if self.show_spark else "off"]
+        return source["script"], bool(source.get("connect")), []
+
     def _sync_worker(self, sources, manual, lang):
         # Refresh every source currently on screen, one at a time. In stacked
         # mode that is both; otherwise just the visible one, so viewing Codex
@@ -1128,16 +1174,16 @@ class UsageApp:
                 break
             key = source["key"]
             try:
-                extra = ["--spark", "on" if self.show_spark else "off"] if key == "codex" else []
-                result = run_script(source["script"], "--sync", "--lang", lang, *extra)
+                script, connect, extra = self._reader_for(source)
+                result = run_script(script, "--sync", "--lang", lang, *extra)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)
                     )
                     raise RuntimeError("%s reader failed" % key)
                 data = self._load_latest(source)
-                if manual and source.get("connect") and data.get("code") == "needs_login":
-                    run_script(source["script"], "--connect", "--lang", lang)
+                if manual and connect and data.get("code") == "needs_login":
+                    run_script(script, "--connect", "--lang", lang)
                 self.events.put(("sync_result", (key, data)))
             except Exception as error:
                 log_error(repr(error))
@@ -1240,6 +1286,22 @@ class UsageApp:
         # Re-sync Codex so its reader rebuilds the bars for the new setting.
         self.start_sync(False)
 
+    def _set_codex_source(self, source):
+        if source not in CODEX_SOURCES or source == self.codex_source:
+            return
+        self.codex_source = source
+        self.tray.current_codex_source = source
+        self.codex_source_var.set(source)
+        # The two readers write the same cache; drop the stale one so the widget
+        # shows "syncing" until the newly chosen reader reports.
+        self.datas["codex"] = {"error": self._t("syncing")}
+        if not self._stacked() and self._source()["key"] == "codex":
+            self.data = self.datas["codex"]
+        self._save_settings()
+        self._draw()
+        self._place()
+        self.start_sync(False)
+
     def _load_latest(self, source=None):
         source = source or self._source()
         try:
@@ -1275,6 +1337,7 @@ class UsageApp:
                         "on_top": self.on_top,
                         "lang": self.lang,
                         "show_spark": self.show_spark,
+                        "codex_source": self.codex_source,
                     }
                 ),
                 encoding="utf-8",
@@ -1695,6 +1758,17 @@ class UsageApp:
                 command=lambda c=code: self._set_lang(c),
             )
         menu.add_cascade(label=self._t("language"), menu=lang_menu)
+        # Codex data source (official browser page / local CLI log).
+        self.codex_source_var.set(self.codex_source)
+        codex_menu = tk.Menu(menu, tearoff=0)
+        for value, string_key in (("web", "codex_source_web"), ("local", "codex_source_local")):
+            codex_menu.add_radiobutton(
+                label=self._t(string_key),
+                value=value,
+                variable=self.codex_source_var,
+                command=lambda v=value: self._set_codex_source(v),
+            )
+        menu.add_cascade(label=self._t("codex_source"), menu=codex_menu)
         menu.add_separator()
         menu.add_command(label=self._t("show_hide"), command=self.toggle)
         menu.add_command(label=self._t("exit"), command=self.exit)

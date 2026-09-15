@@ -108,6 +108,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Sync now | Click `↻` |
 | Hide / show | Click `×`, or left-click the notification icon |
 | Always on top on/off | Right-click the notification icon → `Always on top` |
+| Codex data source | Right-click anywhere (or the notification icon) → `Codex data source` → `Official page (browser)` / `Local CLI log` |
 | Show Codex Spark usage | Right-click anywhere (or the notification icon) → `Also show Codex Spark usage` (off by default) |
 | Language (KO/EN) | Right-click anywhere (or the notification icon) → `Language` → `한국어` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
@@ -115,8 +116,16 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 Percent is **used** (the bar fills as you consume quota). A moved widget keeps
 its bottom edge fixed when the height changes between modes.
 
-Codex reports usage per model. By default the widget shows only your general
-Codex limit (current session + weekly). Turn on **Also show Codex Spark usage**
+**Codex data source.** By default Codex usage is read from the official ChatGPT
+usage page in a dedicated browser profile (like the Claude reader), so usage
+from the ChatGPT app and web is included. It needs a one-time ChatGPT sign-in
+(separate from Claude; press `↻` to sign in), and reads only the rendered page —
+never cookies or tokens. The page shows "remaining"; the widget converts it to a
+used percent. Switch to **Local CLI log** to read only `~/.codex` without a
+login — that reader sees CLI usage only, and the Spark toggle applies to it.
+
+Codex reports usage per model. In **Local CLI log** mode the widget shows only
+your general Codex limit (current session + weekly). Turn on **Also show Codex Spark usage**
 to also see model-specific buckets (e.g. GPT-5.3-Codex-Spark): the general
 bucket and the model bucket then show together when both are in use, each
 model bucket tagged in its label (e.g. `Current session · Spark`). Even with the
@@ -286,6 +295,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 즉시 동기화 | `↻` |
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |
 | 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
+| Codex 데이터 소스 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex 데이터 소스` → `공식 페이지 (브라우저)` / `로컬 CLI 기록` |
 | Codex Spark 표시 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex Spark 사용량도 표시` (기본 꺼짐) |
 | 언어 (한/영) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `언어 (Language)` → `한국어` / `English` |
 | 완전 종료 | 알림 아이콘 우클릭 → `종료` |
@@ -293,8 +303,15 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 퍼센트는 **사용량 기준**(쓸수록 막대가 참)입니다. 창을 옮겨 둔 경우, 모드에 따라
 높이가 바뀌어도 아래 모서리가 고정됩니다.
 
-Codex는 모델별로 사용량을 따로 보고합니다. 기본값은 **일반 Codex 한도(현재 세션 +
-주간)만** 표시하고, **`Codex Spark 사용량도 표시`** 를 켜면 모델별 버킷(예:
+**Codex 데이터 소스.** 기본값은 **공식 페이지(브라우저)** — Claude 리더처럼 전용
+브라우저 프로필로 ChatGPT usage 페이지를 읽어 **ChatGPT 앱·웹 사용량까지 포함**된
+값을 보여줍니다. 처음 한 번 ChatGPT 로그인이 필요하고(Claude와 분리, `↻`로 로그인),
+쿠키·토큰은 읽지 않고 화면 값만 읽습니다. 페이지의 `남음`은 위젯에서 **사용량**으로
+변환됩니다. **로컬 CLI 기록** 으로 바꾸면 로그인 없이 `~/.codex`만 읽습니다(그 방식은
+CLI 사용분만 보이며, Spark 토글은 이 모드에서 동작).
+
+Codex는 모델별로 사용량을 따로 보고합니다. **로컬 CLI 기록** 모드에서 기본값은
+**일반 Codex 한도(현재 세션 + 주간)만** 표시하고, **`Codex Spark 사용량도 표시`** 를 켜면 모델별 버킷(예:
 GPT-5.3-Codex-Spark)도 함께 보입니다 — 일반과 모델 버킷을 둘 다 쓰면 둘 다 뜨며,
 모델 버킷은 라벨에 태그가 붙습니다(예: `현재 세션 · Spark`). 토글이 꺼져 있어도
 일반 한도가 오래됐고 모델 버킷만 쓰는 중이면 그 모델 버킷을 표시해, 위젯이 낡은
