@@ -9,6 +9,7 @@ import ctypes
 import json
 import os
 import queue
+import shutil
 import socket
 import subprocess
 import sys
@@ -21,15 +22,20 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
+APP_VERSION = "0.8.0"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 LATEST = BASE_DIR / "latest.json"
 CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
 CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
+SELF_SCRIPT = BASE_DIR / "claude_usage.pyw"
 CODEX_LATEST = BASE_DIR / "codex_latest.json"
 ERROR_LOG = BASE_DIR / "error.log"
 ICON_PATH = BASE_DIR / "assets" / "claude-usage.ico"
 STATE_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ClaudeCodexUsage"
+# The dedicated reader browsers keep their profiles and login state here
+# (usage.py / codex_web.py APP_DATA). Uninstall clears it for a clean removal.
+BROWSER_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ClaudePet"
 AUTO_FILE = STATE_DIR / "auto.enabled"
 SETTINGS_FILE = STATE_DIR / "settings.json"
 PYTHONW_FILE = STATE_DIR / "pythonw.path"
@@ -113,6 +119,7 @@ MODE_BY_ID = {menu_id: mode for menu_id, mode, _key in MODE_MENU}
 LANG_KO_ID = 3000
 LANG_EN_ID = 3001
 SPARK_TOGGLE_ID = 1004
+UNINSTALL_ID = 1005
 # Codex data source: the official ChatGPT usage page (browser) or the local
 # Codex CLI logs. Browser sees app/web usage too; local needs no login.
 CODEX_SOURCES = ("web", "local")
@@ -141,6 +148,15 @@ STRINGS = {
     "codex_source": {"ko": "Codex 데이터 소스", "en": "Codex data source"},
     "codex_source_web": {"ko": "공식 페이지 (브라우저)", "en": "Official page (browser)"},
     "codex_source_local": {"ko": "로컬 CLI 기록", "en": "Local CLI log"},
+    "uninstall": {"ko": "제거 (Uninstall)", "en": "Uninstall"},
+    "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
+    "uninstall_confirm": {
+        "ko": "위젯·감시자를 종료하고 바로가기·설정·로그인(전용 브라우저)을 모두 제거합니다.\n"
+              "이 프로그램 폴더 자체는 남으니 나중에 직접 삭제하세요.\n\n계속할까요?",
+        "en": "This stops the widget/watcher and removes the shortcuts, settings and "
+              "sign-in (dedicated browsers).\nThe program folder itself remains — delete it "
+              "yourself afterwards.\n\nContinue?",
+    },
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
     "exit": {"ko": "종료", "en": "Exit"},
     "language": {"ko": "언어 (Language)", "en": "Language"},
@@ -466,6 +482,8 @@ class TrayIcon:
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
         user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
+        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
+        user32.AppendMenuW(menu, self.MF_STRING, UNINSTALL_ID, tr(lang, "uninstall"))
         point = POINT()
         user32.GetCursorPos(ctypes.byref(point))
         user32.SetForegroundWindow(self.hwnd)
@@ -496,6 +514,8 @@ class TrayIcon:
             self.events.put(("codex_source", "web"))
         elif command == CODEX_SRC_LOCAL_ID:
             self.events.put(("codex_source", "local"))
+        elif command == UNINSTALL_ID:
+            self.events.put(("uninstall", None))
         elif command in MODE_BY_ID:
             self.events.put(("mode", MODE_BY_ID[command]))
 
@@ -1105,6 +1125,8 @@ class UsageApp:
                 self._toggle_spark()
             elif action == "codex_source":
                 self._set_codex_source(payload)
+            elif action == "uninstall":
+                self._uninstall()
             elif action == "sync_result":
                 key, data = payload
                 self.datas[key] = data
@@ -1285,6 +1307,32 @@ class UsageApp:
         self._save_settings()
         # Re-sync Codex so its reader rebuilds the bars for the new setting.
         self.start_sync(False)
+
+    def _uninstall(self):
+        """Confirm, then launch the uninstaller and quit. The uninstaller stops
+        the watcher, closes the dedicated browsers, and removes shortcuts,
+        settings and login state; the program folder itself is left in place."""
+        try:
+            confirmed = messagebox.askyesno(
+                self._t("uninstall_confirm_title"), self._t("uninstall_confirm")
+            )
+        except Exception:
+            confirmed = False
+        if not confirmed:
+            return
+        try:
+            subprocess.Popen(
+                [python_console(), str(SELF_SCRIPT), "--uninstall"],
+                cwd=str(BASE_DIR),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=CREATE_NO_WINDOW,
+                close_fds=True,
+            )
+        except Exception as error:
+            log_error("uninstall launch failed: %r" % error)
+        self.exit()
 
     def _set_codex_source(self, source):
         if source not in CODEX_SOURCES or source == self.codex_source:
@@ -1494,6 +1542,10 @@ class UsageApp:
         self.canvas.create_text(
             pad, self._s(19), text=title, anchor="w",
             fill="#888899", font=self._font(8, "bold"),
+        )
+        self.canvas.create_text(
+            pad, self._s(31), text="v" + APP_VERSION, anchor="w",
+            fill="#5A5A6A", font=self._font(7),
         )
         self._draw_button(self.hit_sync, "..." if self.syncing else "↻")
         self._draw_button(self.hit_mode, "▾")
@@ -1772,6 +1824,8 @@ class UsageApp:
         menu.add_separator()
         menu.add_command(label=self._t("show_hide"), command=self.toggle)
         menu.add_command(label=self._t("exit"), command=self.exit)
+        menu.add_separator()
+        menu.add_command(label=self._t("uninstall"), command=self._uninstall)
         if x is None:
             x = self.root.winfo_pointerx()
             y = self.root.winfo_pointery()
@@ -1980,9 +2034,20 @@ def run_watcher():
 
 
 def uninstall():
+    """Stop the app and remove everything it installed: the widget/watcher, the
+    dedicated reader browsers, the shortcuts, and the saved settings/login. The
+    program folder itself is left in place for the user to delete."""
     send_control(MAIN_PORT, "exit")
     send_control(WATCH_PORT, "exit")
-    time.sleep(0.2)
+    time.sleep(0.3)
+    # Stop the dedicated reader browsers so their profiles can be deleted and no
+    # orphan Chrome is left running.
+    for script in (USAGE_SCRIPT, CODEX_WEB_SCRIPT):
+        try:
+            run_script(script, "--close", timeout=20)
+        except Exception as error:
+            log_error("uninstall close %s: %r" % (script.name, error))
+    time.sleep(0.5)
     for path in (STARTUP_LINK, DESKTOP_LINK, LEGACY_DESKTOP_LINK):
         try:
             path.unlink()
@@ -1990,11 +2055,18 @@ def uninstall():
             pass
         except OSError as error:
             log_error(repr(error))
+    for folder in (STATE_DIR, BROWSER_DATA_DIR):
+        try:
+            if folder.exists():
+                shutil.rmtree(folder, ignore_errors=True)
+        except OSError as error:
+            log_error(repr(error))
     root = tk.Tk()
     root.withdraw()
     messagebox.showinfo(
         "Claude Codex Usage",
-        "자동 실행과 바탕화면 바로가기를 제거했습니다.\n로그인 및 사용량 데이터는 보존됩니다.",
+        "제거를 완료했습니다.\n자동 실행·바로가기, 설정, 로그인(전용 브라우저) 데이터를 모두 지웠습니다.\n"
+        "프로그램 폴더 자체는 남아 있으니 필요하면 직접 삭제하세요.",
     )
     root.destroy()
 

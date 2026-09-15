@@ -112,6 +112,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Show Codex Spark usage | Right-click anywhere (or the notification icon) → `Also show Codex Spark usage` (off by default) |
 | Language (KO/EN) | Right-click anywhere (or the notification icon) → `Language` → `한국어` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
+| Uninstall | Right-click anywhere (or the notification icon) → `Uninstall` (removes shortcuts, settings and login; the folder stays) |
 
 Percent is **used** (the bar fills as you consume quota). A moved widget keeps
 its bottom edge fixed when the height changes between modes.
@@ -178,8 +179,9 @@ reinstalling, close the old dedicated usage browser (or restart Windows) once.
 | `claude_usage.pyw` | The combined widget UI, notification icon, view modes |
 | `usage.py` | Claude usage from the official Usage page (browser) |
 | `codex_usage.py` | Codex usage from local `~/.codex` session logs |
+| `codex_web.py` | Codex/Work usage from the official ChatGPT page (browser) |
 | `install.py` / `install.cmd` | Shortcut creation / installation |
-| `uninstall.cmd` | Removes automatic startup and shortcuts |
+| `uninstall.cmd` | Full removal: stops the app, closes the reader browsers, and deletes shortcuts, settings and login (also on the `Uninstall` menu item) |
 | `cleanup-legacy.cmd` | Stops and unregisters the older standalone widgets |
 | `assets/claude-usage.ico` | Widget icon |
 
@@ -299,6 +301,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | Codex Spark 표시 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex Spark 사용량도 표시` (기본 꺼짐) |
 | 언어 (한/영) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `언어 (Language)` → `한국어` / `English` |
 | 완전 종료 | 알림 아이콘 우클릭 → `종료` |
+| 제거 (Uninstall) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `제거 (Uninstall)` (바로가기·설정·로그인 삭제, 폴더는 남음) |
 
 퍼센트는 **사용량 기준**(쓸수록 막대가 참)입니다. 창을 옮겨 둔 경우, 모드에 따라
 높이가 바뀌어도 아래 모서리가 고정됩니다.
@@ -324,8 +327,9 @@ GPT-5.3-Codex-Spark)도 함께 보입니다 — 일반과 모델 버킷을 둘 �
 | `claude_usage.pyw` | 통합 위젯 UI, 알림 아이콘, 보기 모드 |
 | `usage.py` | Claude 공식 Usage 페이지에서 사용량 읽기(브라우저) |
 | `codex_usage.py` | 로컬 `~/.codex` 세션 로그에서 Codex 사용량 읽기 |
+| `codex_web.py` | ChatGPT 공식 페이지에서 Codex/Work 사용량 읽기(브라우저) |
 | `install.py` / `install.cmd` | 바로가기 생성 / 설치 |
-| `uninstall.cmd` | 자동 실행·바로가기 제거 |
+| `uninstall.cmd` | 완전 제거: 앱 종료·리더 브라우저 종료·바로가기·설정·로그인 삭제(우클릭 메뉴 `제거`로도 가능) |
 | `cleanup-legacy.cmd` | 옛 standalone 위젯 중지·등록 해제 |
 | `assets/claude-usage.ico` | 위젯 아이콘 |
 

@@ -5,7 +5,14 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-15
+
 ### Added
+- **위젯에 버전 표시**: 제목(USAGE) 아래 작게 현재 버전(`v0.8.0`)을 표시합니다.
+- **제거(Uninstall) 메뉴**: 우클릭·알림 아이콘 메뉴에 **`제거 (Uninstall)`** 추가.
+  확인 후 위젯·감시자를 종료하고 전용 브라우저를 닫은 뒤 **바로가기·설정·로그인
+  데이터를 모두 제거**합니다(프로그램 폴더 자체는 남김). `uninstall.cmd`로도 실행
+  가능합니다.
 - **Codex 데이터 소스 선택 (기본: 공식 페이지/브라우저)**: 우클릭·알림 아이콘
   메뉴에 **`Codex 데이터 소스`** 하위 메뉴 추가 — `공식 페이지 (브라우저)` /
   `로컬 CLI 기록`.
@@ -188,6 +195,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.8.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.7.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.6.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.6.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
