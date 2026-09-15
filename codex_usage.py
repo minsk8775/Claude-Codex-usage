@@ -172,7 +172,11 @@ def bounded_lines(handle):
 def newest_snapshot(home=None):
     """Scan recent rollout files and return (rate_limits, event_epoch).
 
-    Selects the general Codex bucket; unidentified legacy snapshots also qualify.
+    Returns the freshest usable snapshot regardless of which limit bucket it
+    belongs to, so the display tracks the model the user is actually using
+    right now (general Codex, a model-specific bucket like Codex-Spark, ...).
+    Earlier code kept only the general ``codex`` bucket, which froze the widget
+    on a stale value whenever the user worked in a model-specific bucket.
     """
     best = None  # (event_epoch, rate_limits)
     for path in recent_rollouts(home):
@@ -195,8 +199,6 @@ def newest_snapshot(home=None):
                         continue
                     limits = payload.get("rate_limits")
                     if not isinstance(limits, dict):
-                        continue
-                    if limits.get("limit_id") not in (None, "", "codex"):
                         continue
                     if not any(
                         isinstance(limits.get(key), dict)
@@ -317,6 +319,26 @@ def make_bar(window, event_epoch, now_epoch=None):
     }
 
 
+def bucket_tag(limits):
+    """Short model tag for a model-specific bucket, or '' for the general one.
+
+    Codex reports a separate rate-limit bucket per model (e.g. limit_id
+    ``codex_bengalfox`` / limit_name "GPT-5.3-Codex-Spark"). For anything other
+    than the general ``codex`` bucket we surface a compact tag so the numbers
+    are not mistaken for the account-wide limit.
+    """
+    limit_id = limits.get("limit_id")
+    if limit_id in (None, "", "codex"):
+        return ""
+    name = limits.get("limit_name")
+    if isinstance(name, str) and name.strip():
+        # "GPT-5.3-Codex-Spark" -> "Spark"; a name without hyphens stays as-is.
+        return name.strip().rsplit("-", 1)[-1].strip()[:20]
+    if isinstance(limit_id, str) and limit_id:
+        return limit_id.replace("codex_", "").strip()[:20]
+    return ""
+
+
 def make_payload(limits, event_epoch, now_epoch=None):
     en = LANG == "en"
     if not isinstance(limits, dict):
@@ -332,13 +354,20 @@ def make_payload(limits, event_epoch, now_epoch=None):
         raise SyncError(
             "No Codex usage bars found" if en else "Codex 사용량 막대를 찾지 못했습니다"
         )
+    tag = bucket_tag(limits)
+    if tag:
+        for bar in bars:
+            bar["label"] = "%s · %s" % (bar["label"], tag)
+    limit_id = limits.get("limit_id")
     payload = {
         "source": "codex-local",
         "synced_at": datetime.now(timezone.utc).isoformat(),
         "observed_at": datetime.fromtimestamp(event_epoch, timezone.utc).isoformat(),
-        "limit_id": "codex",
+        "limit_id": limit_id if isinstance(limit_id, str) and limit_id else "codex",
         "bars": bars,
     }
+    if tag:
+        payload["bucket_name"] = limits.get("limit_name") or limit_id
     plan = limits.get("plan_type")
     if isinstance(plan, str) and plan:
         payload["plan_type"] = plan
@@ -357,9 +386,9 @@ def sync_usage(home=None):
                 "Codex 세션 폴더를 찾지 못했습니다\nCodex CLI를 한 번 실행하세요"
             )
         raise SyncError(
-            "No general Codex usage recorded\nSend one prompt with Codex"
+            "No Codex usage recorded\nSend one prompt with Codex"
             if en else
-            "Codex 기본 한도 기록이 없습니다\nCodex로 프롬프트를 한 번 보내세요"
+            "Codex 사용량 기록이 없습니다\nCodex로 프롬프트를 한 번 보내세요"
         )
     return make_payload(limits, event_epoch)
 
@@ -413,6 +442,35 @@ def self_test():
         assert payload["bars"][0]["sub"].endswith("2시간 후 재설정"), payload["bars"][0]["sub"]
         assert payload["bars"][1]["sub"].endswith("19시간 후 재설정"), payload["bars"][1]["sub"]
         assert payload["plan_type"] == "pro"
+        # The general bucket carries no model tag.
+        assert "bucket_name" not in payload, payload
+
+        # A model-specific bucket gets a compact tag on its bars, and a fresher
+        # model bucket wins over an older general one (the real-world case that
+        # used to freeze the widget on a stale general value).
+        assert bucket_tag({"limit_id": "codex"}) == ""
+        assert bucket_tag({"limit_id": "codex_bengalfox",
+                           "limit_name": "GPT-5.3-Codex-Spark"}) == "Spark"
+        spark = {"limit_id": "codex_bengalfox", "limit_name": "GPT-5.3-Codex-Spark",
+                 "primary": {"used_percent": 12.0, "window_minutes": 300,
+                             "resets_at": now + 3 * 3600},
+                 "secondary": {"used_percent": 4.0, "window_minutes": 10080,
+                               "resets_at": now + 5 * 86400}}
+        sp = make_payload(spark, now, now_epoch=now)
+        assert sp["bars"][0]["label"] == "현재 세션 · Spark", sp["bars"][0]
+        assert sp["bars"][1]["label"] == "주간 한도 · Spark", sp["bars"][1]
+        assert sp["limit_id"] == "codex_bengalfox", sp
+        assert sp["bucket_name"] == "GPT-5.3-Codex-Spark", sp
+        with open(os.path.join(day, "rollout-2026-08-31T13-00-00-def.jsonl"),
+                  "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "timestamp": "2026-08-31T13:00:00Z", "type": "event_msg",
+                "payload": {"type": "token_count", "rate_limits": {
+                    "limit_id": "codex_bengalfox",
+                    "limit_name": "GPT-5.3-Codex-Spark",
+                    "primary": {"used_percent": 7.0, "window_minutes": 300}}}}) + "\n")
+        picked, _ = newest_snapshot(home)
+        assert picked.get("limit_id") == "codex_bengalfox", picked
 
         # Window-label fallbacks for durations without a friendly name.
         assert window_label(1440) == "일일 한도"

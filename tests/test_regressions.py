@@ -53,16 +53,27 @@ class CodexTests(unittest.TestCase):
     def write(self, *rows):
         self.rollout.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
-    def test_model_bucket_cannot_replace_codex(self):
-        self.write(self.event(age=2), self.event(2, "codex_bengalfox"))
+    def test_fresher_model_bucket_is_shown(self):
+        # The freshest bucket wins so the widget tracks the model actually in
+        # use now, instead of freezing on a stale general value (the real bug:
+        # heavy Codex-Spark use while the general bucket sat ~25h old).
+        self.write(self.event(age=2), self.event(2, "codex_bengalfox", age=1))
+        payload = codex.sync_usage(str(self.home))
+        self.assertEqual(payload["bars"][0]["pct"], 2)
+        self.assertEqual(payload["limit_id"], "codex_bengalfox")
+        self.assertTrue(payload["bars"][0]["label"].endswith("bengalfox"))
+
+    def test_general_bucket_wins_when_it_is_freshest(self):
+        self.write(self.event(2, "codex_bengalfox", age=2), self.event(85, age=1))
         payload = codex.sync_usage(str(self.home))
         self.assertEqual(payload["bars"][0]["pct"], 85)
         self.assertEqual(payload["limit_id"], "codex")
 
-    def test_model_only_is_not_presented_as_general_usage(self):
+    def test_model_only_usage_is_shown_with_a_tag(self):
         self.write(self.event(2, "codex_bengalfox"))
-        with self.assertRaises(codex.SyncError):
-            codex.sync_usage(str(self.home))
+        payload = codex.sync_usage(str(self.home))
+        self.assertEqual(payload["bars"][0]["pct"], 2)
+        self.assertEqual(payload["limit_id"], "codex_bengalfox")
 
     def test_legacy_unidentified_snapshot_is_supported(self):
         row = self.event()
