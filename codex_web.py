@@ -29,7 +29,9 @@ import usage  # reuse the browser/CDP plumbing
 
 # The official Codex/Work usage analytics page (confirmed via probe).
 CODEX_USAGE_URL = "https://chatgpt.com/codex/cloud/settings/analytics#usage"
-CODEX_LATEST = os.path.join(HERE, "codex_latest.json")
+# Runtime cache under LOCALAPPDATA (shared with the widget), not the program
+# folder, so it works even in a read-only or OneDrive-synced install location.
+CODEX_LATEST = os.path.join(usage.CACHE_DIR, "codex_latest.json")
 
 # Isolate the ChatGPT login/profile from Claude's dedicated browser.
 usage.USAGE_URL = CODEX_USAGE_URL

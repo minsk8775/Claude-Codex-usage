@@ -5,6 +5,15 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-09-29
+
+### Fixed
+- **읽기 전용/OneDrive 폴더에 설치해도 동작**: 결과 캐시(`latest.json`,
+  `codex_latest.json`)와 `error.log`를 **프로그램 폴더 대신 `%LOCALAPPDATA%\
+  ClaudeCodexUsage`** 에 쓰도록 변경. 이전에는 프로그램 폴더에 써서, OneDrive로
+  동기화되는 `문서` 폴더 등에 두면 `FileNotFoundError`로 동기화가 실패했습니다. 이제
+  **문서함(OneDrive)에 둬도 정상 동작**합니다.
+
 ## [0.8.2] - 2026-09-29
 
 ### Changed
@@ -216,6 +225,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.8.3]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

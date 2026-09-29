@@ -40,7 +40,12 @@ from datetime import datetime, timezone
 
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-LATEST = os.path.join(DIR, "codex_latest.json")
+# Runtime cache under LOCALAPPDATA (not the program folder) so the app works
+# even when installed in a read-only or OneDrive-synced location.
+_LOCAL = os.environ.get("LOCALAPPDATA") or os.path.join(
+    os.path.expanduser("~"), "AppData", "Local"
+)
+LATEST = os.path.join(_LOCAL, "ClaudeCodexUsage", "codex_latest.json")
 
 # UI language for the labels and reset text this script emits ("ko" or "en").
 # Set from --lang; the widget passes its own language through.

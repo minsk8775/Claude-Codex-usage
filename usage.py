@@ -31,7 +31,6 @@ from datetime import datetime, timezone
 
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-LATEST = os.path.join(DIR, "latest.json")
 USAGE_URL = "https://claude.ai/settings/usage"
 
 # UI language for the labels and status text this script emits ("ko" or "en"),
@@ -42,6 +41,10 @@ LANG = "ko"
 LOCAL_DATA = os.environ.get("LOCALAPPDATA") or os.path.join(
     os.path.expanduser("~"), "AppData", "Local"
 )
+# Runtime cache lives under LOCALAPPDATA, not the program folder, so the app
+# still works when installed in a read-only or OneDrive-synced location.
+CACHE_DIR = os.path.join(LOCAL_DATA, "ClaudeCodexUsage")
+LATEST = os.path.join(CACHE_DIR, "latest.json")
 APP_DATA = os.path.join(LOCAL_DATA, "ClaudePet")
 PROFILE = os.path.join(APP_DATA, "BrowserProfile")
 STATE = os.path.join(APP_DATA, "browser_state.json")

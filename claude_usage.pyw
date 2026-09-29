@@ -22,17 +22,19 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
-APP_VERSION = "0.8.2"
+APP_VERSION = "0.8.3"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
-LATEST = BASE_DIR / "latest.json"
 CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
 CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
 SELF_SCRIPT = BASE_DIR / "claude_usage.pyw"
-CODEX_LATEST = BASE_DIR / "codex_latest.json"
-ERROR_LOG = BASE_DIR / "error.log"
 ICON_PATH = BASE_DIR / "assets" / "claude-usage.ico"
 STATE_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ClaudeCodexUsage"
+# Runtime caches and the log live under LOCALAPPDATA, not the program folder, so
+# the app works even when installed in a read-only or OneDrive-synced location.
+LATEST = STATE_DIR / "latest.json"
+CODEX_LATEST = STATE_DIR / "codex_latest.json"
+ERROR_LOG = STATE_DIR / "error.log"
 # The dedicated reader browsers keep their profiles and login state here
 # (usage.py / codex_web.py APP_DATA). Uninstall clears it for a clean removal.
 BROWSER_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ClaudePet"
@@ -184,6 +186,7 @@ APP_KEY_BY_NAME = (("claude", "claude"), ("chatgpt", "codex"))
 
 def log_error(value):
     try:
+        ERROR_LOG.parent.mkdir(parents=True, exist_ok=True)
         with ERROR_LOG.open("a", encoding="utf-8") as stream:
             stream.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), value))
     except OSError:
