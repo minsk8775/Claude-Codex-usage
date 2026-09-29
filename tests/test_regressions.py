@@ -381,6 +381,22 @@ class WidgetTests(unittest.TestCase):
             app._sync_worker([widget.SOURCE_BY_KEY["claude"]], False, "en")
         self.assertNotIn("--spark", run.call_args.args)
 
+    def test_recover_restart_closes_reader_and_requests_resync(self):
+        app = self.app()
+        with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
+            app._recover_worker("restart", [widget.SOURCE_BY_KEY["claude"]], "en")
+        args = run.call_args.args
+        self.assertIs(args[0], widget.USAGE_SCRIPT)
+        self.assertIn("--close", args)
+        self.assertEqual(app.events.get_nowait()[0], "recover_done")
+
+    def test_recover_reconnect_opens_login_without_resync(self):
+        app = self.app()
+        with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
+            app._recover_worker("reconnect", [widget.SOURCE_BY_KEY["claude"]], "en")
+        self.assertIn("--connect", run.call_args.args)
+        self.assertTrue(app.events.empty())
+
     def test_watcher_survives_oversized_packets_and_uses_app_transitions(self):
         control = Mock()
         oversized = OSError("oversized")

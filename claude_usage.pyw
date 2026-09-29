@@ -22,7 +22,7 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.1"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 LATEST = BASE_DIR / "latest.json"
@@ -120,6 +120,9 @@ LANG_KO_ID = 3000
 LANG_EN_ID = 3001
 SPARK_TOGGLE_ID = 1004
 UNINSTALL_ID = 1005
+FIX_RETRY_ID = 1006
+FIX_RECONNECT_ID = 1007
+FIX_RESTART_ID = 1008
 # Codex data source: the official ChatGPT usage page (browser) or the local
 # Codex CLI logs. Browser sees app/web usage too; local needs no login.
 CODEX_SOURCES = ("web", "local")
@@ -148,6 +151,10 @@ STRINGS = {
     "codex_source": {"ko": "Codex 데이터 소스", "en": "Codex data source"},
     "codex_source_web": {"ko": "공식 페이지 (브라우저)", "en": "Official page (browser)"},
     "codex_source_local": {"ko": "로컬 CLI 기록", "en": "Local CLI log"},
+    "fix_sync": {"ko": "동기화 문제 해결", "en": "Fix sync issues"},
+    "fix_retry": {"ko": "다시 시도", "en": "Retry now"},
+    "fix_reconnect": {"ko": "다시 로그인 (브라우저 창)", "en": "Re-sign in (browser)"},
+    "fix_restart": {"ko": "리더 브라우저 재시작", "en": "Restart reader browser"},
     "uninstall": {"ko": "제거 (Uninstall)", "en": "Uninstall"},
     "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
     "uninstall_confirm": {
@@ -479,6 +486,12 @@ class TrayIcon:
             self.MF_BYCOMMAND,
         )
         user32.AppendMenuW(menu, self.MF_POPUP, codex_menu, tr(lang, "codex_source"))
+        # Sync-recovery submenu (retry / re-sign-in / restart the reader browser).
+        fix_menu = user32.CreatePopupMenu()
+        user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RETRY_ID, tr(lang, "fix_retry"))
+        user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RESTART_ID, tr(lang, "fix_restart"))
+        user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RECONNECT_ID, tr(lang, "fix_reconnect"))
+        user32.AppendMenuW(menu, self.MF_POPUP, fix_menu, tr(lang, "fix_sync"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
         user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
@@ -516,6 +529,12 @@ class TrayIcon:
             self.events.put(("codex_source", "local"))
         elif command == UNINSTALL_ID:
             self.events.put(("uninstall", None))
+        elif command == FIX_RETRY_ID:
+            self.events.put(("recover", "retry"))
+        elif command == FIX_RESTART_ID:
+            self.events.put(("recover", "restart"))
+        elif command == FIX_RECONNECT_ID:
+            self.events.put(("recover", "reconnect"))
         elif command in MODE_BY_ID:
             self.events.put(("mode", MODE_BY_ID[command]))
 
@@ -1127,6 +1146,10 @@ class UsageApp:
                 self._set_codex_source(payload)
             elif action == "uninstall":
                 self._uninstall()
+            elif action == "recover":
+                self._recover(payload)
+            elif action == "recover_done":
+                self.start_sync(True)
             elif action == "sync_result":
                 key, data = payload
                 self.datas[key] = data
@@ -1333,6 +1356,39 @@ class UsageApp:
         except Exception as error:
             log_error("uninstall launch failed: %r" % error)
         self.exit()
+
+    def _recover(self, action):
+        """In-widget recovery for sync failures. 'retry' re-syncs; 'restart'
+        closes the reader browser(s) then re-syncs (fixes a hung/timed-out
+        hidden browser); 'reconnect' opens the sign-in window(s)."""
+        if action == "retry":
+            self.start_sync(True)
+            return
+        if self.syncing:
+            # Let the running sync finish; it will flush pending before we act.
+            self.pending_sync = True
+        threading.Thread(
+            target=self._recover_worker,
+            args=(action, self._visible_sources(), self.lang),
+            daemon=True,
+        ).start()
+
+    def _recover_worker(self, action, sources, lang):
+        for source in sources:
+            if self.exiting:
+                return
+            script, connect, _extra = self._reader_for(source)
+            try:
+                if action == "restart":
+                    run_script(script, "--close", "--lang", lang, timeout=30)
+                elif action == "reconnect" and connect:
+                    run_script(script, "--connect", "--lang", lang, timeout=90)
+            except Exception as error:
+                log_error("recover %s %s: %r" % (action, source["key"], repr(error)))
+        # Restart closed the browser, so re-sync to bring it back. Reconnect just
+        # opened the sign-in window; leave the resync to the user (after login).
+        if action == "restart":
+            self.events.put(("recover_done", None))
 
     def _set_codex_source(self, source):
         if source not in CODEX_SOURCES or source == self.codex_source:
@@ -1821,6 +1877,12 @@ class UsageApp:
                 command=lambda v=value: self._set_codex_source(v),
             )
         menu.add_cascade(label=self._t("codex_source"), menu=codex_menu)
+        # Sync-recovery submenu.
+        fix_menu = tk.Menu(menu, tearoff=0)
+        fix_menu.add_command(label=self._t("fix_retry"), command=lambda: self._recover("retry"))
+        fix_menu.add_command(label=self._t("fix_restart"), command=lambda: self._recover("restart"))
+        fix_menu.add_command(label=self._t("fix_reconnect"), command=lambda: self._recover("reconnect"))
+        menu.add_cascade(label=self._t("fix_sync"), menu=fix_menu)
         menu.add_separator()
         menu.add_command(label=self._t("show_hide"), command=self.toggle)
         menu.add_command(label=self._t("exit"), command=self.exit)

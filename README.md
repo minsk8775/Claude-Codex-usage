@@ -109,6 +109,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Hide / show | Click `×`, or left-click the notification icon |
 | Always on top on/off | Right-click the notification icon → `Always on top` |
 | Codex data source | Right-click anywhere (or the notification icon) → `Codex data source` → `Official page (browser)` / `Local CLI log` |
+| Fix a sync failure | Right-click anywhere (or the notification icon) → `Fix sync issues` → `Retry now` / `Restart reader browser` / `Re-sign in` (Restart fixes a timed-out hidden browser) |
 | Show Codex Spark usage | Right-click anywhere (or the notification icon) → `Also show Codex Spark usage` (off by default) |
 | Language (KO/EN) | Right-click anywhere (or the notification icon) → `Language` → `한국어` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
@@ -298,6 +299,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 숨기기/표시 | `×` 또는 알림 아이콘 왼쪽 클릭 |
 | 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
 | Codex 데이터 소스 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex 데이터 소스` → `공식 페이지 (브라우저)` / `로컬 CLI 기록` |
+| 동기화 실패 해결 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `동기화 문제 해결` → `다시 시도` / `리더 브라우저 재시작` / `다시 로그인` (재시작이 timeout 멈춤을 풀어줌) |
 | Codex Spark 표시 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex Spark 사용량도 표시` (기본 꺼짐) |
 | 언어 (한/영) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `언어 (Language)` → `한국어` / `English` |
 | 완전 종료 | 알림 아이콘 우클릭 → `종료` |

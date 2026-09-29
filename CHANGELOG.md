@@ -5,6 +5,18 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-29
+
+### Added
+- **위젯에서 동기화 문제 해결**: 우클릭·알림 아이콘 메뉴에 **`동기화 문제 해결`**
+  하위 메뉴 추가 — cmd 없이 위젯에서 바로 복구합니다.
+  - **다시 시도**: 강제 재동기화.
+  - **리더 브라우저 재시작**: 리더 브라우저를 닫고(`--close`) 다시 동기화. 숨긴
+    브라우저가 스로틀·Cloudflare로 멈춰 `동기화 실패 (timed out)`이 뜰 때의 핵심
+    해결책.
+  - **다시 로그인**: 로그인(브라우저) 창을 다시 엽니다(세션 만료 시).
+  - 현재 화면에 보이는 소스(Claude/Codex, 스택뷰면 둘 다)에 적용됩니다.
+
 ## [0.8.0] - 2026-09-15
 
 ### Added
@@ -195,6 +207,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.8.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.7.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.6.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
