@@ -5,6 +5,15 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-29
+
+### Changed
+- **메뉴 정리**: `제거 (Uninstall)`를 `표시 / 숨기기` **위로** 이동.
+- **완전 제거 강화**: `제거`가 이제 바로가기·설정·로그인 데이터뿐 아니라 **프로그램
+  폴더 자체까지 삭제**합니다(되돌릴 수 없음). 실행 중인 폴더는 자기 자신을 못 지우므로,
+  종료 후 별도 프로세스가 잠금이 풀리면 삭제합니다. OneDrive의 한글 폴더 같은
+  비ASCII 경로도 안전하게 지워지도록 Python으로 처리합니다.
+
 ## [0.8.1] - 2026-09-29
 
 ### Added
@@ -207,6 +216,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.8.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.7.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

@@ -22,7 +22,7 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
-APP_VERSION = "0.8.1"
+APP_VERSION = "0.8.2"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 LATEST = BASE_DIR / "latest.json"
@@ -158,11 +158,11 @@ STRINGS = {
     "uninstall": {"ko": "제거 (Uninstall)", "en": "Uninstall"},
     "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
     "uninstall_confirm": {
-        "ko": "위젯·감시자를 종료하고 바로가기·설정·로그인(전용 브라우저)을 모두 제거합니다.\n"
-              "이 프로그램 폴더 자체는 남으니 나중에 직접 삭제하세요.\n\n계속할까요?",
-        "en": "This stops the widget/watcher and removes the shortcuts, settings and "
-              "sign-in (dedicated browsers).\nThe program folder itself remains — delete it "
-              "yourself afterwards.\n\nContinue?",
+        "ko": "위젯·감시자를 종료하고 바로가기·설정·로그인(전용 브라우저)과\n"
+              "**프로그램 폴더까지 모두 삭제**합니다. 되돌릴 수 없습니다.\n\n계속할까요?",
+        "en": "This stops the widget/watcher and deletes the shortcuts, settings, "
+              "sign-in (dedicated browsers) AND the program folder itself.\n"
+              "This cannot be undone.\n\nContinue?",
     },
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
     "exit": {"ko": "종료", "en": "Exit"},
@@ -493,10 +493,10 @@ class TrayIcon:
         user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RECONNECT_ID, tr(lang, "fix_reconnect"))
         user32.AppendMenuW(menu, self.MF_POPUP, fix_menu, tr(lang, "fix_sync"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
+        user32.AppendMenuW(menu, self.MF_STRING, UNINSTALL_ID, tr(lang, "uninstall"))
+        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
         user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
-        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, UNINSTALL_ID, tr(lang, "uninstall"))
         point = POINT()
         user32.GetCursorPos(ctypes.byref(point))
         user32.SetForegroundWindow(self.hwnd)
@@ -1884,10 +1884,10 @@ class UsageApp:
         fix_menu.add_command(label=self._t("fix_reconnect"), command=lambda: self._recover("reconnect"))
         menu.add_cascade(label=self._t("fix_sync"), menu=fix_menu)
         menu.add_separator()
+        menu.add_command(label=self._t("uninstall"), command=self._uninstall)
+        menu.add_separator()
         menu.add_command(label=self._t("show_hide"), command=self.toggle)
         menu.add_command(label=self._t("exit"), command=self.exit)
-        menu.add_separator()
-        menu.add_command(label=self._t("uninstall"), command=self._uninstall)
         if x is None:
             x = self.root.winfo_pointerx()
             y = self.root.winfo_pointery()
@@ -2095,10 +2095,42 @@ def run_watcher():
     return 0
 
 
+def schedule_self_delete(target):
+    """Delete the program folder itself once this process exits.
+
+    A running process holds its own folder open, so hand the delete to a
+    detached Python process that waits for the lock to clear and retries. We use
+    Python (not a .cmd) so non-ASCII paths (e.g. a OneDrive '문서' folder) delete
+    reliably.
+    """
+    code = (
+        "import os,shutil,sys,time\n"
+        "t=sys.argv[1]\n"
+        "for _ in range(30):\n"
+        "    shutil.rmtree(t,ignore_errors=True)\n"
+        "    if not os.path.exists(t):\n"
+        "        break\n"
+        "    time.sleep(1)\n"
+    )
+    temp = os.environ.get("TEMP") or os.environ.get("TMP") or "C:\\"
+    try:
+        subprocess.Popen(
+            [python_console(), "-c", code, str(target)],
+            cwd=temp,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW,
+            close_fds=True,
+        )
+    except OSError as error:
+        log_error("self-delete schedule failed: %r" % error)
+
+
 def uninstall():
     """Stop the app and remove everything it installed: the widget/watcher, the
-    dedicated reader browsers, the shortcuts, and the saved settings/login. The
-    program folder itself is left in place for the user to delete."""
+    dedicated reader browsers, the shortcuts, the saved settings/login, and the
+    program folder itself."""
     send_control(MAIN_PORT, "exit")
     send_control(WATCH_PORT, "exit")
     time.sleep(0.3)
@@ -2127,10 +2159,12 @@ def uninstall():
     root.withdraw()
     messagebox.showinfo(
         "Claude Codex Usage",
-        "제거를 완료했습니다.\n자동 실행·바로가기, 설정, 로그인(전용 브라우저) 데이터를 모두 지웠습니다.\n"
-        "프로그램 폴더 자체는 남아 있으니 필요하면 직접 삭제하세요.",
+        "제거를 완료했습니다.\n자동 실행·바로가기, 설정, 로그인(전용 브라우저) 데이터를 지웠습니다.\n"
+        "확인을 누르면 프로그램 폴더도 삭제됩니다.",
     )
     root.destroy()
+    # Remove the program folder after we exit and release it.
+    schedule_self_delete(BASE_DIR)
 
 
 def main():
