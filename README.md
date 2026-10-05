@@ -101,7 +101,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 
 | Action | Control |
 | --- | --- |
-| Move the widget | Drag anywhere except the buttons and the resize grip |
+| Move the widget | Drag anywhere except the buttons and the resize grip — onto any monitor; the spot is remembered. Right-click → `Reset position` puts it back above the clock |
 | Resize | Drag the bottom-right grip, or `Ctrl` + mouse wheel |
 | Change view mode | Click `▾`, right-click anywhere on the widget, or right-click the notification icon |
 | Open the app | Double-click Claude's area → the Claude app; Codex's area → the ChatGPT app. Installed apps are focused or launched (they are Store apps launched by AUMID); if an app is not installed its website opens instead |
@@ -291,7 +291,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 
 | 동작 | 방법 |
 | --- | --- |
-| 위치 옮기기 | 버튼·크기 손잡이 제외한 아무 곳 드래그 |
+| 위치 옮기기 | 버튼·크기 손잡이 제외한 아무 곳 드래그 — 다른 모니터로도 가능하며 위치가 저장됨. 우클릭 → `위치 초기화`로 시계 위 기본 위치로 복귀 |
 | 크기 조절 | 오른쪽 아래 손잡이 또는 `Ctrl` + 마우스 휠 |
 | 보기 모드 변경 | `▾` 클릭, **창 아무 곳 우클릭**, 또는 알림 아이콘 우클릭 |
 | 앱 열기 | 더블클릭 — Claude 쪽→Claude 앱, Codex 쪽→ChatGPT 앱. 실행 중이면 포커스, 꺼져 있으면 실행(둘 다 Store 앱이라 AUMID로 띄움). 앱이 없을 때만 사이트로 |

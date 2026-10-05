@@ -397,6 +397,28 @@ class WidgetTests(unittest.TestCase):
         self.assertIn("--connect", run.call_args.args)
         self.assertTrue(app.events.empty())
 
+    def test_moved_widget_stays_on_its_own_monitor(self):
+        app = self.app()
+        app.root = Mock()
+        app.dragging, app.width, app.height = False, 192, 150
+        app.user_moved, app.pos_x, app.bottom_anchor = True, 2500, 900
+        with patch.object(widget, "monitor_work_area", return_value=(1920, 0, 3200, 1024)), \
+                patch.object(widget, "work_area", return_value=(0, 0, 1920, 1040)):
+            app._place()
+        app.root.geometry.assert_called_with("192x150+2500+750")
+        self.assertTrue(app.user_moved)
+
+    def test_widget_on_an_unplugged_monitor_returns_to_the_default_corner(self):
+        app = self.app()
+        app.root = Mock()
+        app.dragging, app.width, app.height = False, 192, 150
+        app.user_moved, app.pos_x, app.bottom_anchor = True, 2500, 900
+        with patch.object(widget, "monitor_work_area", return_value=None), \
+                patch.object(widget, "work_area", return_value=(0, 0, 1920, 1040)):
+            app._place()
+        app.root.geometry.assert_called_with("192x150+1714+882")
+        self.assertFalse(app.user_moved)
+
     def test_watcher_survives_oversized_packets_and_uses_app_transitions(self):
         control = Mock()
         oversized = OSError("oversized")

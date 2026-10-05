@@ -5,6 +5,21 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-05
+
+### Fixed
+- **옮겨 둔 위젯이 작업표시줄 시계 위로 되돌아가던 문제**: 위치를 잡을 때 항상
+  **주 모니터** 작업 영역으로 범위를 제한해서, 다른 모니터로 옮겨도 동기화·다시
+  그리기 때마다 주 모니터로 끌려왔습니다. 또 옮긴 위치가 저장되지 않아 다시 켜질
+  때마다 기본 위치로 돌아갔습니다.
+  - 이제 **위젯이 놓인 모니터** 기준으로만 범위를 제한해, 보조 모니터에 둬도 그대로
+    있습니다.
+  - 드래그로 옮긴 위치를 `settings.json`에 저장해 **재시작·재부팅 후에도 유지**합니다.
+  - 그 모니터가 분리되면 주 모니터의 기본 위치로 돌아옵니다.
+
+### Added
+- 우클릭·알림 아이콘 메뉴에 **`위치 초기화 (시계 위로)`** 추가 — 기본 위치로 복귀.
+
 ## [0.8.3] - 2026-09-29
 
 ### Fixed
@@ -225,6 +240,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.8.4]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.3]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.1]: https://github.com/minsk8775/Claude-Codex-usage/releases

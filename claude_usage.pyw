@@ -22,7 +22,7 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
-APP_VERSION = "0.8.3"
+APP_VERSION = "0.8.4"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
@@ -125,6 +125,7 @@ UNINSTALL_ID = 1005
 FIX_RETRY_ID = 1006
 FIX_RECONNECT_ID = 1007
 FIX_RESTART_ID = 1008
+RESET_POS_ID = 1009
 # Codex data source: the official ChatGPT usage page (browser) or the local
 # Codex CLI logs. Browser sees app/web usage too; local needs no login.
 CODEX_SOURCES = ("web", "local")
@@ -157,6 +158,7 @@ STRINGS = {
     "fix_retry": {"ko": "다시 시도", "en": "Retry now"},
     "fix_reconnect": {"ko": "다시 로그인 (브라우저 창)", "en": "Re-sign in (browser)"},
     "fix_restart": {"ko": "리더 브라우저 재시작", "en": "Restart reader browser"},
+    "reset_position": {"ko": "위치 초기화 (시계 위로)", "en": "Reset position"},
     "uninstall": {"ko": "제거 (Uninstall)", "en": "Uninstall"},
     "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
     "uninstall_confirm": {
@@ -496,6 +498,8 @@ class TrayIcon:
         user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RECONNECT_ID, tr(lang, "fix_reconnect"))
         user32.AppendMenuW(menu, self.MF_POPUP, fix_menu, tr(lang, "fix_sync"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
+        user32.AppendMenuW(menu, self.MF_STRING, RESET_POS_ID, tr(lang, "reset_position"))
+        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, UNINSTALL_ID, tr(lang, "uninstall"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
@@ -530,6 +534,8 @@ class TrayIcon:
             self.events.put(("codex_source", "web"))
         elif command == CODEX_SRC_LOCAL_ID:
             self.events.put(("codex_source", "local"))
+        elif command == RESET_POS_ID:
+            self.events.put(("reset_position", None))
         elif command == UNINSTALL_ID:
             self.events.put(("uninstall", None))
         elif command == FIX_RETRY_ID:
@@ -733,6 +739,34 @@ class RECT(ctypes.Structure):
 def work_area():
     area = RECT()
     ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0)
+    return area.left, area.top, area.right, area.bottom
+
+
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", RECT),
+        ("rcWork", RECT),
+        ("dwFlags", wintypes.DWORD),
+    ]
+
+
+def monitor_work_area(x, y):
+    """Work area of the monitor that contains (x, y), or None when the point is
+    on no monitor (e.g. a monitor that has since been unplugged)."""
+    user32 = ctypes.windll.user32
+    user32.MonitorFromPoint.argtypes = [POINT, wintypes.DWORD]
+    user32.MonitorFromPoint.restype = wintypes.HANDLE
+    user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    monitor = user32.MonitorFromPoint(POINT(int(x), int(y)), 0)  # MONITOR_DEFAULTTONULL
+    if not monitor:
+        return None
+    info = MONITORINFO()
+    info.cbSize = ctypes.sizeof(MONITORINFO)
+    if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return None
+    area = info.rcWork
     return area.left, area.top, area.right, area.bottom
 
 
@@ -979,7 +1013,16 @@ class UsageApp:
         self.data = self.datas[self._source()["key"]]
         self.syncing = False
         self.pending_sync = None
+        # A position the user dragged the widget to is remembered across
+        # restarts (and across monitors) until they reset it from the menu.
         self.user_moved = False
+        self.pos_x = None
+        saved_pos = settings.get("position")
+        if isinstance(saved_pos, dict):
+            px, pb = saved_pos.get("x"), saved_pos.get("bottom")
+            if type(px) is int and type(pb) is int:
+                self.user_moved = True
+                self.pos_x = px
         self.dragging = False
         self.resizing = False
         self.drag_x = 0
@@ -999,7 +1042,7 @@ class UsageApp:
         self.hit_update = (0, 0, 0, 0)
         self.update_available = False
         self.stack_regions = []
-        self.bottom_anchor = None
+        self.bottom_anchor = saved_pos.get("bottom") if self.user_moved else None
         self.mode_var = tk.StringVar(master=self.root, value=self.mode)
         self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
         self.lang_var = tk.StringVar(master=self.root, value=self.lang)
@@ -1147,6 +1190,8 @@ class UsageApp:
                 self._toggle_spark()
             elif action == "codex_source":
                 self._set_codex_source(payload)
+            elif action == "reset_position":
+                self._reset_position()
             elif action == "uninstall":
                 self._uninstall()
             elif action == "recover":
@@ -1445,6 +1490,11 @@ class UsageApp:
                         "lang": self.lang,
                         "show_spark": self.show_spark,
                         "codex_source": self.codex_source,
+                        "position": (
+                            {"x": int(self.pos_x), "bottom": int(self.bottom_anchor)}
+                            if self.user_moved and self.pos_x is not None
+                            and self.bottom_anchor is not None else None
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -1887,6 +1937,8 @@ class UsageApp:
         fix_menu.add_command(label=self._t("fix_reconnect"), command=lambda: self._recover("reconnect"))
         menu.add_cascade(label=self._t("fix_sync"), menu=fix_menu)
         menu.add_separator()
+        menu.add_command(label=self._t("reset_position"), command=self._reset_position)
+        menu.add_separator()
         menu.add_command(label=self._t("uninstall"), command=self._uninstall)
         menu.add_separator()
         menu.add_command(label=self._t("show_hide"), command=self.toggle)
@@ -1918,9 +1970,12 @@ class UsageApp:
         if self.resizing:
             self.resizing = False
             self._save_settings()
-        if self.dragging:
-            # Remember the new bottom edge so later resizes keep it in place.
+        if self.dragging and self.user_moved:
+            # Remember where it was dropped (any monitor) so syncs, resizes and
+            # restarts keep it there instead of snapping back to the clock.
+            self.pos_x = self.root.winfo_x()
             self.bottom_anchor = self.root.winfo_y() + self.height
+            self._save_settings()
         self.dragging = False
 
     def _on_wheel(self, event):
@@ -1936,22 +1991,44 @@ class UsageApp:
         self._place()
 
     def _place(self):
-        left, top, right, bottom = work_area()
+        if self.dragging:
+            return  # never fight the user mid-drag
+        area = None
         if self.user_moved:
             # Keep the bottom edge where it is, so a taller/shorter window grows
             # or shrinks upward instead of dragging the whole widget down.
-            x = self.root.winfo_x()
+            x = self.pos_x if self.pos_x is not None else self.root.winfo_x()
             if self.bottom_anchor is not None:
                 y = self.bottom_anchor - self.height
             else:
                 y = self.root.winfo_y()
-        else:
+            # Stay on whichever monitor the user put it on. If that monitor is
+            # gone, fall back to the default corner of the primary one.
+            area = monitor_work_area(x + self.width // 2, y + self.height // 2)
+            if area is None:
+                area = monitor_work_area(x + self.width // 2, y + self.height - 1)
+            if area is None:
+                self.user_moved = False
+                self.pos_x = None
+        if area is None:
+            area = work_area()
+            left, top, right, bottom = area
             x = right - self.width - 14
             y = bottom - self.height - 8
+        left, top, right, bottom = area
         x = max(left, min(x, right - self.width))
         y = max(top, min(y, bottom - self.height))
         self.root.geometry("%dx%d+%d+%d" % (self.width, self.height, x, y))
         self.bottom_anchor = y + self.height
+        if self.user_moved:
+            self.pos_x = x
+
+    def _reset_position(self):
+        self.user_moved = False
+        self.pos_x = None
+        self.bottom_anchor = None
+        self._save_settings()
+        self._place()
 
     def _hide_from_taskbar(self):
         self.root.update_idletasks()
