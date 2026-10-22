@@ -26,7 +26,52 @@ def load(name, filename):
 
 codex = load("tested_codex", "codex_usage.py")
 claude = load("tested_claude", "usage.py")
+badges = load("tested_badges", "title_badges.py")
 widget = load("tested_widget", "claude_usage.pyw") if os.name == "nt" else None
+
+
+class BadgeTests(unittest.TestCase):
+    NOW = datetime(2026, 10, 22, 15, 0)
+
+    def test_reset_text_is_shortened_for_every_reader_format(self):
+        cases = {
+            "2시간 12분 후 재설정": "2시간 12분 후",
+            "(월) 오전 8:00에 재설정": "(월) 오전 8:00",
+            "2026. 10. 24. 오후 5:10 초기화": "2일 2시간 후",
+            "2026. 10. 22. 오전 12:30 초기화": "곧 초기화",
+            "기록 10/22 14:58\n3시간 후 재설정": "3시간 후",
+            "기록 10/21 09:00\n오래된 기록 · Codex에서 갱신": "오래된 기록",
+            "": "",
+        }
+        for sub, expected in cases.items():
+            self.assertEqual(badges.short_reset(sub, "ko", self.NOW), expected, sub)
+        self.assertEqual(badges.short_reset("Resets in 2 hr 12 min", "en", self.NOW), "2 hr 12 min")
+
+    def test_labels_are_compact_and_keep_model_tags(self):
+        self.assertEqual(badges.short_label("현재 세션"), "세션")
+        self.assertEqual(badges.short_label("모든 모델"), "주간")
+        self.assertEqual(badges.short_label("주간 한도 · Spark"), "주간·Spark")
+        self.assertEqual(badges.short_label("Current session", "en"), "Session")
+
+    def test_columns_cover_login_errors_and_bars(self):
+        self.assertEqual(badges.columns({"code": "needs_login", "error": "x"})[0]["label"], "로그인 필요")
+        self.assertEqual(badges.columns({"error": "timed out"})[0]["label"], "동기화 실패")
+        self.assertTrue(badges.columns(None)[0]["warn"])
+        data = {"bars": [
+            {"label": "현재 세션", "pct": 21, "pct_text": "21%", "sub": "2시간 후 재설정"},
+            {"label": "모든 모델", "pct": 105, "pct_text": "100%", "sub": "(월) 오전 8:00에 재설정"},
+            {"label": "extra", "pct": 1, "pct_text": "1%", "sub": ""},
+        ]}
+        cols = badges.columns(data, "ko", self.NOW)
+        self.assertEqual(len(cols), 2)
+        self.assertEqual((cols[0]["label"], cols[0]["reset"]), ("세션", "2시간 후"))
+        self.assertEqual(cols[1]["pct"], 100.0)
+
+    def test_level_colors_match_the_widget(self):
+        self.assertEqual(badges.level_color(50, False), "#4C8BF5")
+        self.assertEqual(badges.level_color(80, False), "#F5A85F")
+        self.assertEqual(badges.level_color(95, False), "#F1707B")
+        self.assertEqual(badges.level_color(95, True), "#999999")
 
 
 class CodexTests(unittest.TestCase):
@@ -246,6 +291,7 @@ class WidgetTests(unittest.TestCase):
         app.lang = "ko"
         app.show_spark = False
         app.codex_source = "web"
+        app.display = "widget"
         app.datas = {"claude": {}, "codex": {"error": "no cache"}}
         app.data = {}
         app.tray = Mock()
@@ -396,6 +442,26 @@ class WidgetTests(unittest.TestCase):
             app._recover_worker("reconnect", [widget.SOURCE_BY_KEY["claude"]], "en")
         self.assertIn("--connect", run.call_args.args)
         self.assertTrue(app.events.empty())
+
+    def test_badges_only_keeps_widget_hidden_but_syncs_running_apps(self):
+        app = self.app()
+        app.display = "badges"
+        app._known_app_keys = {"codex"}
+        app.root.withdraw()
+        self.assertEqual([s["key"] for s in app._visible_sources()], ["codex"])
+        app.events.put(("autoshow", None))
+        app._poll_events()
+        self.assertEqual(app.root.state(), "withdrawn")
+        app.events.put(("show", None))
+        app._poll_events()
+        self.assertEqual(app.root.state(), "normal")
+
+    def test_widget_only_never_syncs_for_badges(self):
+        app = self.app()
+        app.display = "widget"
+        app.mode = "claude"
+        app._known_app_keys = {"claude", "codex"}
+        self.assertEqual([s["key"] for s in app._visible_sources()], ["claude"])
 
     def test_moved_widget_stays_on_its_own_monitor(self):
         app = self.app()

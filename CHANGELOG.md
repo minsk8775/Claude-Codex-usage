@@ -5,6 +5,37 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-22
+
+### Added
+- **표시 방식 선택 + 앱 제목 표시줄 사용량 배지**: 우클릭·알림 아이콘 메뉴의
+  **`표시 방식`** 에서 셋 중 하나를 고릅니다.
+  - **위젯만**: 예전처럼 떠 있는 위젯만.
+  - **앱 제목 표시줄 배지만**: 위젯은 숨긴 채 Claude·Codex 앱 창의 배지로만 봅니다.
+    앱이 켜질 때도 위젯이 자동으로 뜨지 않고, 알림 아이콘 클릭·바탕화면 바로가기·배지
+    더블클릭처럼 **직접 열 때만** 위젯이 나옵니다. 동기화는 켜져 있는 앱만 합니다.
+  - **위젯 + 제목 표시줄 배지** (기본): 둘 다.
+- 배지는 Claude 앱·Codex(ChatGPT) 앱 창의 제목 표시줄 오른쪽(–/□/× 버튼 왼쪽)에 붙어,
+  한도별 **사용량 %, 얇은 막대, 초기화까지 남은 시간**을 보여줍니다. 색은 위젯과 같아요
+  (75% 이상 주황, 90% 이상 빨강).
+  - 앱 창에 "소유된" 창이라 **창을 옮기면 따라가고, 다른 창에 가려지면 같이 가려지며,
+    최소화하면 숨습니다.**
+  - Codex 공식 페이지의 날짜형 초기화 시각(`2026. 10. 24. 오후 5:10`)은 **남은 시간
+    (`2일 2시간 후`)** 으로 바꿔 보여줍니다.
+  - 배지를 드래그해 위치를 바꾸면 앱별로 기억하고(배율이 달라도 유지), 배지 우클릭 →
+    `배지 위치 초기화`로 되돌립니다. 더블클릭하면 위젯이 열립니다.
+  - 화면 배율(125%/150%)에서도 위치가 맞도록 배율을 인식하는 별도 보조 프로세스
+    (`title_badges.py`)로 그리며, 위젯이 꺼지면 함께 종료됩니다. 위젯이 이미 저장한
+    사용량 캐시만 읽고, 앱이나 쿠키·토큰은 건드리지 않습니다.
+
+### Fixed
+- **프로그램을 꺼도 폴더가 지워지지 않던 문제**: Claude·Codex용 전용 Chrome이 프로그램
+  폴더를 작업 폴더로 물고 떠 있어서, Windows가 그 폴더의 삭제·교체를 막았습니다. 게다가
+  위젯을 끌 때 Claude용 Chrome만 닫고 Codex용 Chrome은 남겨 두었습니다.
+  - 전용 Chrome을 앱 데이터 폴더(`%LOCALAPPDATA%\ClaudePet`)에서 띄워 프로그램 폴더를
+    잡지 않게 했습니다. 제목 표시줄 배지 프로세스도 같습니다.
+  - 위젯을 끌 때 **Claude용·Codex용 Chrome을 둘 다** 닫습니다.
+
 ## [0.8.4] - 2026-10-05
 
 ### Fixed
@@ -240,6 +271,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.4]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.3]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.8.2]: https://github.com/minsk8775/Claude-Codex-usage/releases

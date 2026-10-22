@@ -22,12 +22,13 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
-APP_VERSION = "0.8.4"
+APP_VERSION = "0.9.0"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
 CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
 SELF_SCRIPT = BASE_DIR / "claude_usage.pyw"
+BADGES_SCRIPT = BASE_DIR / "title_badges.py"
 ICON_PATH = BASE_DIR / "assets" / "claude-usage.ico"
 STATE_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ClaudeCodexUsage"
 # Runtime caches and the log live under LOCALAPPDATA, not the program folder, so
@@ -59,8 +60,9 @@ STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
 MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
-UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py", "codex_web.py", "install.py", "install.cmd")
-CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "hide", "toggle", "exit")}
+UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py", "codex_web.py", "title_badges.py", "install.py", "install.cmd")
+# "autoshow" is the watcher noticing an app launch; "show" is the user asking.
+CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "hide", "toggle", "exit")}
 
 # The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
 # a protected WindowsApps folder, so they cannot be launched by their exe path.
@@ -126,6 +128,15 @@ FIX_RETRY_ID = 1006
 FIX_RECONNECT_ID = 1007
 FIX_RESTART_ID = 1008
 RESET_POS_ID = 1009
+# How usage is displayed: the floating widget, badges on the app title bars, or both.
+DISPLAY_MODES = ("widget", "badges", "both")
+DEFAULT_DISPLAY = "both"
+DISPLAY_MENU = (
+    (3200, "widget", "display_widget"),
+    (3201, "badges", "display_badges"),
+    (3202, "both", "display_both"),
+)
+DISPLAY_BY_ID = {menu_id: mode for menu_id, mode, _key in DISPLAY_MENU}
 # Codex data source: the official ChatGPT usage page (browser) or the local
 # Codex CLI logs. Browser sees app/web usage too; local needs no login.
 CODEX_SOURCES = ("web", "local")
@@ -151,6 +162,10 @@ STRINGS = {
     "mode_both_paged": {"ko": "둘 다 (좌우 전환)", "en": "Both (arrows)"},
     "always_on_top": {"ko": "항상 위 (Always on top)", "en": "Always on top"},
     "show_spark": {"ko": "Codex Spark 사용량도 표시", "en": "Also show Codex Spark usage"},
+    "display_mode": {"ko": "표시 방식", "en": "Display"},
+    "display_widget": {"ko": "위젯만", "en": "Widget only"},
+    "display_badges": {"ko": "앱 제목 표시줄 배지만", "en": "Title-bar badges only"},
+    "display_both": {"ko": "위젯 + 제목 표시줄 배지", "en": "Widget + title-bar badges"},
     "codex_source": {"ko": "Codex 데이터 소스", "en": "Codex data source"},
     "codex_source_web": {"ko": "공식 페이지 (브라우저)", "en": "Official page (browser)"},
     "codex_source_local": {"ko": "로컬 CLI 기록", "en": "Local CLI log"},
@@ -220,10 +235,6 @@ def run_script(script, *arguments, timeout=60):
         timeout=timeout,
         check=False,
     )
-
-
-def run_usage(*arguments, timeout=60):
-    return run_script(USAGE_SCRIPT, *arguments, timeout=timeout)
 
 
 def run_git(*arguments, timeout=90):
@@ -414,6 +425,7 @@ class TrayIcon:
         self.current_on_top = True
         self.current_lang = DEFAULT_LANG
         self.current_show_spark = False
+        self.current_display = DEFAULT_DISPLAY
         self.current_codex_source = DEFAULT_CODEX_SOURCE
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -472,6 +484,16 @@ class TrayIcon:
             self.MF_BYCOMMAND
             | (self.MF_CHECKED if self.current_show_spark else self.MF_UNCHECKED),
         )
+        # Display submenu (widget / title-bar badges / both) as a radio group.
+        display_menu = user32.CreatePopupMenu()
+        for menu_id, _mode, key in DISPLAY_MENU:
+            user32.AppendMenuW(display_menu, self.MF_STRING, menu_id, tr(lang, key))
+        user32.CheckMenuRadioItem(
+            display_menu, DISPLAY_MENU[0][0], DISPLAY_MENU[-1][0],
+            next((i for i, m, _ in DISPLAY_MENU if m == self.current_display), DISPLAY_MENU[0][0]),
+            self.MF_BYCOMMAND,
+        )
+        user32.AppendMenuW(menu, self.MF_POPUP, display_menu, tr(lang, "display_mode"))
         # Language submenu (Korean / English) as a radio group.
         lang_menu = user32.CreatePopupMenu()
         user32.AppendMenuW(lang_menu, self.MF_STRING, LANG_KO_ID, tr(lang, "lang_ko"))
@@ -524,6 +546,8 @@ class TrayIcon:
             self.events.put(("exit", None))
         elif command == 1003:
             self.events.put(("toggle_ontop", None))
+        elif command in DISPLAY_BY_ID:
+            self.events.put(("display", DISPLAY_BY_ID[command]))
         elif command == SPARK_TOGGLE_ID:
             self.events.put(("toggle_spark", None))
         elif command == LANG_KO_ID:
@@ -982,6 +1006,11 @@ class UsageApp:
         # Codex model-specific (Spark) buckets are hidden by default; the general
         # account limit is what most users track. Toggle in the right-click menu.
         self.show_spark = bool(settings.get("show_spark", False))
+        # Display: the floating widget, small badges pinned to the Claude / Codex
+        # app title bars (drawn by the title_badges.py helper), or both.
+        display = settings.get("display")
+        self.display = display if display in DISPLAY_MODES else DEFAULT_DISPLAY
+        self.badge_process = None
         # Codex data source: the official ChatGPT usage page (browser, sees
         # app/web usage) by default, or the local Codex CLI log (no login).
         codex_source = settings.get("codex_source", DEFAULT_CODEX_SOURCE)
@@ -1047,6 +1076,7 @@ class UsageApp:
         self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
         self.lang_var = tk.StringVar(master=self.root, value=self.lang)
         self.spark_var = tk.BooleanVar(master=self.root, value=self.show_spark)
+        self.display_var = tk.StringVar(master=self.root, value=self.display)
         self.codex_source_var = tk.StringVar(master=self.root, value=self.codex_source)
         try:
             self._known_app_keys = running_app_keys()
@@ -1070,7 +1100,7 @@ class UsageApp:
         self._place()
         # In auto mode with no watched app running, start hidden; the widget
         # reappears when Claude or ChatGPT opens.
-        if self.mode == "auto" and not self._known_app_keys:
+        if self.display == "badges" or (self.mode == "auto" and not self._known_app_keys):
             self.root.withdraw()
         else:
             self.show()
@@ -1080,8 +1110,10 @@ class UsageApp:
         self.tray.current_on_top = self.on_top
         self.tray.current_lang = self.lang
         self.tray.current_show_spark = self.show_spark
+        self.tray.current_display = self.display
         self.tray.current_codex_source = self.codex_source
         self.tray.start()
+        self._update_badges()
         self.listener = threading.Thread(target=self._listen, daemon=True)
         self.listener.start()
         self.root.after(100, self._poll_events)
@@ -1100,6 +1132,16 @@ class UsageApp:
             keys = running_app_keys()
         except Exception:
             keys = set()
+        if self.display == "badges":
+            # The widget stays out of the way; just make sure a newly opened
+            # app's badge gets fresh numbers.
+            appeared = keys - self._known_app_keys
+            self._known_app_keys = keys
+            if appeared:
+                self.start_sync(False)
+            if not self.exiting:
+                self.root.after(3000, self._auto_tick)
+            return
         if self.mode == "auto":
             view = self._auto_view_for(keys)
             if view != self.auto_view:
@@ -1137,6 +1179,7 @@ class UsageApp:
             except OSError:
                 pass
             self.tray.stop()
+            self._stop_badges()
             if self.restart_pending:
                 start_main()
 
@@ -1166,6 +1209,10 @@ class UsageApp:
                 break
             if action == "show":
                 self.show()
+            elif action == "autoshow":
+                # An app just launched; in badges-only mode the badge is enough.
+                if self.display != "badges":
+                    self.show()
             elif action == "hide":
                 self.hide()
             elif action == "toggle":
@@ -1186,6 +1233,8 @@ class UsageApp:
                 self._set_lang(payload)
             elif action == "toggle_ontop":
                 self._toggle_on_top()
+            elif action == "display":
+                self._set_display(payload)
             elif action == "toggle_spark":
                 self._toggle_spark()
             elif action == "codex_source":
@@ -1217,6 +1266,7 @@ class UsageApp:
 
     def _scheduled_sync(self):
         if not self.exiting:
+            self._update_badges()  # restart the badge helper if it died
             self.start_sync(False)
             self.root.after(120000, self._scheduled_sync)
 
@@ -1323,9 +1373,17 @@ class UsageApp:
         return self._auto_view_for(keys)
 
     def _visible_sources(self):
+        """Sources to sync: what the widget shows (when it is on screen), plus
+        every running app that carries a title-bar badge."""
         if self._stacked():
-            return list(SOURCES)
-        return [self._source()]
+            wanted = {source["key"] for source in SOURCES}
+        else:
+            wanted = {self._source()["key"]}
+        if self.display == "badges" and self.root.state() == "withdrawn":
+            wanted = set()
+        if self.display in ("badges", "both"):
+            wanted |= set(self._known_app_keys)
+        return [source for source in SOURCES if source["key"] in wanted]
 
     def _t(self, key):
         return tr(self.lang, key)
@@ -1370,6 +1428,57 @@ class UsageApp:
         if self.on_top:
             self.root.lift()
         self._save_settings()
+
+    def _set_display(self, display):
+        if display not in DISPLAY_MODES or display == self.display:
+            return
+        self.display = display
+        self.tray.current_display = display
+        self.display_var.set(display)
+        self._save_settings()
+        self._update_badges()
+        if display == "badges":
+            self.hide()
+        else:
+            self.show()
+        self.start_sync(False)
+
+    def _badges_running(self):
+        return self.badge_process is not None and self.badge_process.poll() is None
+
+    def _update_badges(self):
+        """Start or stop the title-bar badge helper to match the setting."""
+        if self.display in ("badges", "both") and not self.exiting:
+            if self._badges_running() or not BADGES_SCRIPT.exists():
+                return
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            executable = Path(sys.executable)
+            windowless = executable.with_name("pythonw.exe")
+            try:
+                self.badge_process = subprocess.Popen(
+                    [str(windowless if windowless.exists() else executable),
+                     str(BADGES_SCRIPT), "--parent", str(os.getpid())],
+                    cwd=str(STATE_DIR),  # don't hold the program folder open
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=CREATE_NO_WINDOW,
+                    close_fds=True,
+                )
+            except OSError as error:
+                log_error("badge helper failed to start: %r" % error)
+                self.badge_process = None
+        else:
+            self._stop_badges()
+
+    def _stop_badges(self):
+        process, self.badge_process = self.badge_process, None
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=2)
+            except Exception as error:
+                log_error("badge helper stop: %r" % error)
 
     def _toggle_spark(self):
         self.show_spark = not self.show_spark
@@ -1489,6 +1598,7 @@ class UsageApp:
                         "on_top": self.on_top,
                         "lang": self.lang,
                         "show_spark": self.show_spark,
+                        "display": self.display,
                         "codex_source": self.codex_source,
                         "position": (
                             {"x": int(self.pos_x), "bottom": int(self.bottom_anchor)}
@@ -1908,6 +2018,16 @@ class UsageApp:
             variable=self.spark_var,
             command=self._toggle_spark,
         )
+        self.display_var.set(self.display)
+        display_menu = tk.Menu(menu, tearoff=0)
+        for _menu_id, mode, string_key in DISPLAY_MENU:
+            display_menu.add_radiobutton(
+                label=self._t(string_key),
+                value=mode,
+                variable=self.display_var,
+                command=lambda m=mode: self._set_display(m),
+            )
+        menu.add_cascade(label=self._t("display_mode"), menu=display_menu)
         # Language submenu (Korean / English).
         self.lang_var.set(self.lang)
         lang_menu = tk.Menu(menu, tearoff=0)
@@ -2076,10 +2196,13 @@ class UsageApp:
             pass
         except OSError as error:
             log_error(repr(error))
-        try:
-            run_usage("--close", timeout=20)
-        except Exception as error:
-            log_error(repr(error))
+        # Close both dedicated reader browsers (Claude and Codex); a browser left
+        # running keeps holding its profile and would block a later reinstall.
+        for script in (USAGE_SCRIPT, CODEX_WEB_SCRIPT):
+            try:
+                run_script(script, "--close", timeout=20)
+            except Exception as error:
+                log_error(repr(error))
         self.root.destroy()
 
 
@@ -2128,9 +2251,9 @@ def running_app_keys():
     return keys
 
 
-def start_main():
+def start_main(auto=False):
     subprocess.Popen(
-        [sys.executable, str(Path(__file__).resolve())],
+        [sys.executable, str(Path(__file__).resolve())] + (["--auto"] if auto else []),
         cwd=str(BASE_DIR),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -2159,7 +2282,7 @@ def run_watcher():
         while True:
             current = running_app_keys()
             if (current - known) and AUTO_FILE.exists():
-                start_main()
+                start_main(auto=True)
             known = current
             try:
                 message, _ = control.recvfrom(65)
@@ -2261,7 +2384,7 @@ def main():
     try:
         control = bind_control(MAIN_PORT)
     except OSError:
-        send_control(MAIN_PORT, "show")
+        send_control(MAIN_PORT, "autoshow" if "--auto" in sys.argv else "show")
         return 0
     UsageApp(control).run()
     return 0

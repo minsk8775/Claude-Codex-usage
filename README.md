@@ -110,6 +110,7 @@ Codex needs no sign-in — just have used the Codex CLI at least once.
 | Always on top on/off | Right-click the notification icon → `Always on top` |
 | Codex data source | Right-click anywhere (or the notification icon) → `Codex data source` → `Official page (browser)` / `Local CLI log` |
 | Fix a sync failure | Right-click anywhere (or the notification icon) → `Fix sync issues` → `Retry now` / `Restart reader browser` / `Re-sign in` (Restart fixes a timed-out hidden browser) |
+| Display | Right-click anywhere (or the notification icon) → `Display` → `Widget only` / `Title-bar badges only` / `Widget + title-bar badges` (default). Badges sit on the Claude / Codex app title bars (left of –/□/×) with each limit's %, a thin bar and the time left until reset; they follow the window and hide when it is minimized. Drag a badge to move it, right-click it to reset, double-click to open the widget. In badges-only mode the widget stays hidden (open it from the notification icon) |
 | Show Codex Spark usage | Right-click anywhere (or the notification icon) → `Also show Codex Spark usage` (off by default) |
 | Language (KO/EN) | Right-click anywhere (or the notification icon) → `Language` → `한국어` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
@@ -181,6 +182,7 @@ reinstalling, close the old dedicated usage browser (or restart Windows) once.
 | `usage.py` | Claude usage from the official Usage page (browser) |
 | `codex_usage.py` | Codex usage from local `~/.codex` session logs |
 | `codex_web.py` | Codex/Work usage from the official ChatGPT page (browser) |
+| `title_badges.py` | Usage badges pinned to the Claude / Codex app title bars (helper process) |
 | `install.py` / `install.cmd` | Shortcut creation / installation |
 | `uninstall.cmd` | Full removal: stops the app, closes the reader browsers, and deletes shortcuts, settings, login and the program folder (also on the `Uninstall` menu item) |
 | `cleanup-legacy.cmd` | Stops and unregisters the older standalone widgets |
@@ -300,6 +302,7 @@ Codex는 로그인 불필요 — Codex CLI를 한 번이라도 썼으면 됩니�
 | 항상 위 켜기/끄기 | 알림 아이콘 우클릭 → `항상 위` (끄면 일반 창처럼 뒤로 내려감) |
 | Codex 데이터 소스 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex 데이터 소스` → `공식 페이지 (브라우저)` / `로컬 CLI 기록` |
 | 동기화 실패 해결 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `동기화 문제 해결` → `다시 시도` / `리더 브라우저 재시작` / `다시 로그인` (재시작이 timeout 멈춤을 풀어줌) |
+| 표시 방식 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `표시 방식` → `위젯만` / `앱 제목 표시줄 배지만` / `위젯 + 제목 표시줄 배지`(기본). 배지는 Claude·Codex 앱 제목 표시줄(–/□/× 왼쪽)에 붙어 한도별 %·막대·초기화까지 남은 시간을 보여주고, 창을 따라가며 최소화하면 숨음. 배지 드래그로 이동, 우클릭으로 위치 초기화, 더블클릭으로 위젯 열기. `배지만` 모드에서는 위젯이 자동으로 뜨지 않음(알림 아이콘으로 열 수 있음) |
 | Codex Spark 표시 | 창 아무 곳(또는 알림 아이콘) 우클릭 → `Codex Spark 사용량도 표시` (기본 꺼짐) |
 | 언어 (한/영) | 창 아무 곳(또는 알림 아이콘) 우클릭 → `언어 (Language)` → `한국어` / `English` |
 | 완전 종료 | 알림 아이콘 우클릭 → `종료` |
@@ -330,6 +333,7 @@ GPT-5.3-Codex-Spark)도 함께 보입니다 — 일반과 모델 버킷을 둘 �
 | `usage.py` | Claude 공식 Usage 페이지에서 사용량 읽기(브라우저) |
 | `codex_usage.py` | 로컬 `~/.codex` 세션 로그에서 Codex 사용량 읽기 |
 | `codex_web.py` | ChatGPT 공식 페이지에서 Codex/Work 사용량 읽기(브라우저) |
+| `title_badges.py` | Claude·Codex 앱 제목 표시줄에 붙는 사용량 배지(보조 프로세스) |
 | `install.py` / `install.cmd` | 바로가기 생성 / 설치 |
 | `uninstall.cmd` | 완전 제거: 앱 종료·리더 브라우저 종료·바로가기·설정·로그인·**프로그램 폴더**까지 삭제(우클릭 메뉴 `제거`로도 가능) |
 | `cleanup-legacy.cmd` | 옛 standalone 위젯 중지·등록 해제 |

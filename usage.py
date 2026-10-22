@@ -169,7 +169,10 @@ def launch_on_hidden_desktop(arguments):
         False,
         getattr(subprocess, "CREATE_NO_WINDOW", 0),
         None,
-        None,
+        # Start in our data folder, not the caller's: a long-lived browser that
+        # inherits the program folder as its working directory locks it, so the
+        # folder cannot be deleted or replaced while the browser runs.
+        APP_DATA,
         ctypes.byref(startup),
         ctypes.byref(process_info),
     )
@@ -443,6 +446,7 @@ def launch_browser(visible):
     else:
         process = subprocess.Popen(
             arguments,
+            cwd=APP_DATA,  # never pin the program folder (see launch_on_hidden_desktop)
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
