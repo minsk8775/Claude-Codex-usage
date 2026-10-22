@@ -2338,16 +2338,25 @@ def schedule_self_delete(*targets):
     Python (not a .cmd) so non-ASCII paths (e.g. a OneDrive '문서' folder) delete
     reliably.
     """
+    # git keeps its object files read-only, which rmtree cannot delete on
+    # Windows, so clear that flag first (a git install left an empty-looking
+    # folder holding only the hidden .git).
     # Keep sweeping for up to a minute, and stop only after every folder has
     # stayed gone for a few seconds: a process that is still exiting can
     # recreate the data folder (a last log line, a late cache write).
     code = (
-        "import os,shutil,sys,time\n"
+        "import os,shutil,stat,sys,time\n"
+        "def rm(t):\n"
+        "    for r,ds,fs in os.walk(t):\n"
+        "        for n in ds+fs:\n"
+        "            try: os.chmod(os.path.join(r,n),stat.S_IWRITE|stat.S_IREAD)\n"
+        "            except OSError: pass\n"
+        "    shutil.rmtree(t,ignore_errors=True)\n"
         "ts=sys.argv[1:]\n"
         "clear=0\n"
         "for _ in range(60):\n"
         "    for t in ts:\n"
-        "        shutil.rmtree(t,ignore_errors=True)\n"
+        "        rm(t)\n"
         "    clear=clear+1 if not any(os.path.exists(t) for t in ts) else 0\n"
         "    if clear>=3:\n"
         "        break\n"
