@@ -513,6 +513,31 @@ class WidgetTests(unittest.TestCase):
             app._set_display("both")
         self.assertEqual(app.root.state(), "normal")
 
+    def test_uninstall_removes_every_trace(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state, browser, program = root / "state", root / "ClaudePet", root / "program"
+            for folder in (state / "sub", browser / "BrowserProfile", program):
+                folder.mkdir(parents=True)
+            (state / "settings.json").write_text('{"lang": "en"}', encoding="utf-8")
+            links = [root / name for name in ("startup.lnk", "desktop.lnk", "toggle.lnk", "old1.lnk", "old2.lnk")]
+            for link in links:
+                link.write_text("x")
+            with patch.multiple(widget, STATE_DIR=state, SETTINGS_FILE=state / "settings.json",
+                                BROWSER_DATA_DIR=browser, BASE_DIR=program,
+                                STARTUP_LINK=links[0], DESKTOP_LINK=links[1],
+                                LEGACY_DESKTOP_LINK=links[2], LEGACY_LINKS=tuple(links[3:]),
+                                send_control=Mock(), wait_for_exit=Mock(), run_script=Mock(),
+                                stop_leftover_processes=Mock(), schedule_self_delete=Mock(),
+                                messagebox=Mock(), tk=Mock()):
+                widget.uninstall()
+                widget.schedule_self_delete.assert_called_once_with(program, state, browser)
+                self.assertIn("Uninstall complete", widget.messagebox.showinfo.call_args.args[1])
+                widget.stop_leftover_processes.assert_called_once()
+            self.assertFalse(state.exists())
+            self.assertFalse(browser.exists())
+            self.assertFalse(any(link.exists() for link in links))
+
     def test_widget_only_never_syncs_for_badges(self):
         app = self.app()
         app.display = "widget"

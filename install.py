@@ -150,7 +150,10 @@ def create_shortcut(path, pythonw, arguments, description):
     )
     link.SetPath(str(pythonw))
     link.SetArguments(arguments)
-    link.SetWorkingDirectory(str(BASE_DIR))
+    # Start in the data folder, not the program folder, so a running widget or
+    # watcher never stops the program folder from being deleted or replaced.
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    link.SetWorkingDirectory(str(STATE_DIR))
     link.SetDescription(description)
     link.SetIconLocation(str(ICON), 0)
     link.SetShowCmd(0)

@@ -57,6 +57,14 @@ STARTUP = Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\P
 DESKTOP_LINK = DESKTOP / "Claude Codex Usage.lnk"
 LEGACY_DESKTOP_LINK = DESKTOP / "Claude Codex Usage Toggle.lnk"
 STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
+# Shortcuts left by the older standalone Claude/Codex widgets (see install.py).
+LEGACY_LINKS = (
+    STARTUP / "Claude Usage Watcher.lnk",
+    STARTUP / "Codex Usage.lnk",
+    DESKTOP / "Claude Usage.lnk",
+    DESKTOP / "Claude Usage Toggle.lnk",
+    DESKTOP / "Codex Usage.lnk",
+)
 MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
@@ -216,6 +224,16 @@ def log_error(value):
         pass
 
 
+def neutral_dir():
+    """A working folder outside the program folder (so it can be deleted or
+    replaced while we run): the data folder, or TEMP once that is gone."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        return str(STATE_DIR)
+    except OSError:
+        return os.environ.get("TEMP") or os.environ.get("TMP") or str(Path.home())
+
+
 def python_console():
     executable = Path(sys.executable)
     candidate = executable.with_name("python.exe")
@@ -229,7 +247,7 @@ def run_script(script, *arguments, timeout=60):
     startup.wShowWindow = subprocess.SW_HIDE
     return subprocess.run(
         command,
-        cwd=str(BASE_DIR),
+        cwd=neutral_dir(),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -1512,7 +1530,7 @@ class UsageApp:
         try:
             subprocess.Popen(
                 [python_console(), str(SELF_SCRIPT), "--uninstall"],
-                cwd=str(BASE_DIR),
+                cwd=os.environ.get("TEMP") or neutral_dir(),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -2268,7 +2286,7 @@ def running_app_keys():
 def start_main(auto=False):
     subprocess.Popen(
         [sys.executable, str(Path(__file__).resolve())] + (["--auto"] if auto else []),
-        cwd=str(BASE_DIR),
+        cwd=neutral_dir(),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -2312,7 +2330,7 @@ def run_watcher():
     return 0
 
 
-def schedule_self_delete(target):
+def schedule_self_delete(*targets):
     """Delete the program folder itself once this process exits.
 
     A running process holds its own folder open, so hand the delete to a
@@ -2320,19 +2338,25 @@ def schedule_self_delete(target):
     Python (not a .cmd) so non-ASCII paths (e.g. a OneDrive '문서' folder) delete
     reliably.
     """
+    # Keep sweeping for up to a minute, and stop only after every folder has
+    # stayed gone for a few seconds: a process that is still exiting can
+    # recreate the data folder (a last log line, a late cache write).
     code = (
         "import os,shutil,sys,time\n"
-        "t=sys.argv[1]\n"
-        "for _ in range(30):\n"
-        "    shutil.rmtree(t,ignore_errors=True)\n"
-        "    if not os.path.exists(t):\n"
+        "ts=sys.argv[1:]\n"
+        "clear=0\n"
+        "for _ in range(60):\n"
+        "    for t in ts:\n"
+        "        shutil.rmtree(t,ignore_errors=True)\n"
+        "    clear=clear+1 if not any(os.path.exists(t) for t in ts) else 0\n"
+        "    if clear>=3:\n"
         "        break\n"
         "    time.sleep(1)\n"
     )
     temp = os.environ.get("TEMP") or os.environ.get("TMP") or "C:\\"
     try:
         subprocess.Popen(
-            [python_console(), "-c", code, str(target)],
+            [python_console(), "-c", code, *(str(target) for target in targets)],
             cwd=temp,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -2342,6 +2366,53 @@ def schedule_self_delete(target):
         )
     except OSError as error:
         log_error("self-delete schedule failed: %r" % error)
+
+
+def wait_for_exit(ports, timeout):
+    """Wait until the widget/watcher have released their control ports, i.e.
+    have really exited (each closes its reader browsers on the way out)."""
+    deadline = time.time() + timeout
+    pending = list(ports)
+    while pending and time.time() < deadline:
+        for port in list(pending):
+            try:
+                bind_control(port).close()
+                pending.remove(port)
+            except OSError:
+                pass
+        if pending:
+            time.sleep(0.5)
+
+
+def stop_leftover_processes():
+    """Force-close anything of ours still running: the dedicated Chrome/Edge
+    (its command line names our browser-data folder) and our Python helpers
+    (their command line names the program or data folder). The user's own
+    browser and other apps never carry these paths, so they are left alone."""
+    script = (
+        "$p=$env:CCU_PATHS -split '\\|';"
+        "$b=$env:CCU_BROWSER;"
+        "Get-CimInstance Win32_Process | Where-Object {"
+        " $c=$_.CommandLine; if(-not $c){return $false};"
+        " if($_.Name -match '^(chrome|msedge)\\.exe$'){return $c.IndexOf($b,[StringComparison]::OrdinalIgnoreCase) -ge 0};"
+        " if($_.Name -match '^pythonw?\\.exe$'){return [bool]($p | Where-Object { $c.IndexOf($_,[StringComparison]::OrdinalIgnoreCase) -ge 0 })};"
+        " $false } | ForEach-Object { $_.ProcessId }"
+    )
+    env = dict(os.environ, CCU_PATHS="%s|%s" % (BASE_DIR, STATE_DIR),
+               CCU_BROWSER=str(BROWSER_DATA_DIR))
+    try:
+        found = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, env=env, timeout=30,
+            creationflags=CREATE_NO_WINDOW,
+        ).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return
+    me = os.getpid()
+    for pid in {int(value) for value in found if value.isdigit()} - {me}:
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True,
+                       creationflags=CREATE_NO_WINDOW)
+    time.sleep(1)
 
 
 def uninstall():
@@ -2356,7 +2427,7 @@ def uninstall():
     lang = lang if lang in LANGS else DEFAULT_LANG
     send_control(MAIN_PORT, "exit")
     send_control(WATCH_PORT, "exit")
-    time.sleep(0.3)
+    wait_for_exit((MAIN_PORT, WATCH_PORT), timeout=45)
     # Stop the dedicated reader browsers so their profiles can be deleted and no
     # orphan Chrome is left running.
     for script in (USAGE_SCRIPT, CODEX_WEB_SCRIPT):
@@ -2364,29 +2435,38 @@ def uninstall():
             run_script(script, "--close", timeout=20)
         except Exception as error:
             log_error("uninstall close %s: %r" % (script.name, error))
-    time.sleep(0.5)
-    for path in (STARTUP_LINK, DESKTOP_LINK, LEGACY_DESKTOP_LINK):
+    stop_leftover_processes()
+    for path in (STARTUP_LINK, DESKTOP_LINK, LEGACY_DESKTOP_LINK) + LEGACY_LINKS:
         try:
             path.unlink()
         except FileNotFoundError:
             pass
         except OSError as error:
             log_error(repr(error))
-    for folder in (STATE_DIR, BROWSER_DATA_DIR):
-        try:
-            if folder.exists():
-                shutil.rmtree(folder, ignore_errors=True)
-        except OSError as error:
-            log_error(repr(error))
+    # Chrome can hold profile files for a moment after it exits; retry. Whatever
+    # is still locked is swept again by the delete helper below. (No log_error
+    # from here on: it would recreate the data folder.)
+    for _ in range(10):
+        for folder in (STATE_DIR, BROWSER_DATA_DIR):
+            shutil.rmtree(folder, ignore_errors=True)
+        if not STATE_DIR.exists() and not BROWSER_DATA_DIR.exists():
+            break
+        time.sleep(1)
     root = tk.Tk()
     root.withdraw()
     messagebox.showinfo("Claude Codex Usage", tr(lang, "uninstall_done"))
     root.destroy()
     # Remove the program folder after we exit and release it.
-    schedule_self_delete(BASE_DIR)
+    schedule_self_delete(BASE_DIR, STATE_DIR, BROWSER_DATA_DIR)
 
 
 def main():
+    # Shortcuts from older installs start us inside the program folder; move
+    # out so the folder is never held open while the widget or watcher runs.
+    try:
+        os.chdir(os.environ.get("TEMP") if "--uninstall" in sys.argv else neutral_dir())
+    except (OSError, TypeError):
+        pass
     if "--watch" in sys.argv:
         return run_watcher()
     if "--uninstall" in sys.argv:
