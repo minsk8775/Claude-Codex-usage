@@ -43,8 +43,8 @@ APPS = (
 # Layout, in 100%-scale pixels (multiplied by the app window's DPI scale).
 TITLE_BAR = 40          # app title-bar height the badge is centred in
 BUTTONS = 150           # room kept free for the app's own –/□/× buttons
-HEIGHT = 32
 PAD_X = 9
+PAD_Y = 3
 COL_GAP = 14
 MIN_COL = 58
 
@@ -88,16 +88,22 @@ def level_color(pct, stale):
     return "#4C8BF5"
 
 
-def short_label(label, lang="ko"):
+def short_label(label, lang="ko", hint=""):
     """'현재 세션 · Spark' -> '세션·Spark', '모든 모델' -> '주간', etc."""
     text = str(label or "")
     head, _, tag = text.partition("·")
     low = head.lower()
-    if "세션" in head or "session" in low:
+    hint = str(hint or "")
+    if "세션" in head or "session" in low or "5시간" in head or "5-hour" in low or "5 hour" in low:
         base = tr(lang, "session")
     elif any(word in head for word in ("모든 모델", "주간")) or any(
             word in low for word in ("all models", "week")):
         base = tr(lang, "weekly")
+    elif _GENERIC.match(head) and ("주간" in hint or "week" in hint.lower()):
+        # The Codex page sometimes gives only "사용 한도"; its reset line names the window.
+        base = tr(lang, "weekly")
+    elif _GENERIC.match(head) and ("5시간" in hint or "5-hour" in hint.lower()):
+        base = tr(lang, "session")
     else:
         base = head.strip() or text.strip()
     tag = tag.strip()
@@ -124,6 +130,9 @@ def remaining_text(seconds, lang="ko"):
     return "%d분 후" % max(minutes, 1)
 
 
+_GENERIC = re.compile(r"^\s*((사용\s*)?한도|usage\s*limit|limit)?\s*$", re.IGNORECASE)
+_KO_REL = re.compile(r"((?:\d+\s*(?:일|시간|분)\s*)+)후")
+_KO_CLOCK = re.compile(r"(\(([월화수목금토일])(?:요일)?\)\s*)?(오전|오후)\s*(\d{1,2}:\d{2})")
 _KO_DATE = re.compile(
     r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})")
 
@@ -156,6 +165,14 @@ def short_reset(sub, lang="ko", now=None):
         if target is not None:
             now = now or datetime.now()
             return remaining_text((target - now).total_seconds(), lang)
+    # Pick out just the time part; page lines can carry extra words around it.
+    match = _KO_REL.search(line)
+    if match:
+        return re.sub(r"\s+", " ", match.group(1)).strip() + " 후"
+    match = _KO_CLOCK.search(line)
+    if match:
+        day = "(%s) " % match.group(2) if match.group(2) else ""
+        return "%s%s %s" % (day, match.group(3), match.group(4))
     line = re.sub(r"\s*(에\s*)?(재설정|초기화)\s*$", "", line)
     line = re.sub(r"^resets?\s+(in\s+)?", "", line, flags=re.IGNORECASE)
     return line.strip()[:18]
@@ -178,7 +195,7 @@ def columns(data, lang="ko", now=None):
             pct = 0.0
         result.append({
             "warn": False,
-            "label": short_label(bar.get("label"), lang),
+            "label": short_label(bar.get("label"), lang, bar.get("sub")),
             "pct": pct,
             "pct_text": str(bar.get("pct_text") or "%g%%" % pct),
             "reset": short_reset(bar.get("sub"), lang, now),
@@ -386,9 +403,19 @@ class Badge:
         s = self.s
         canvas = self.canvas
         canvas.delete("all")
-        label_font, pct_font, small_font = self.font(11, "bold"), self.font(11, "bold"), self.font(9.5)
-        measure_label = tkfont.Font(root=self.app.root, font=label_font).measure
-        measure_small = tkfont.Font(root=self.app.root, font=small_font).measure
+        label_font, pct_font, small_font = self.font(10.5, "bold"), self.font(10.5, "bold"), self.font(9)
+        big = tkfont.Font(root=self.app.root, font=label_font)
+        small = tkfont.Font(root=self.app.root, font=small_font)
+        measure_label, measure_small = big.measure, small.measure
+        # Rows are stacked from the fonts' real line heights so nothing is clipped.
+        pad_y = int(PAD_Y * s)
+        bar_h = max(2, int(3 * s))
+        gap = max(1, int(2 * s))
+        y_label = pad_y
+        bar_top = y_label + big.metrics("linespace") + gap // 2
+        y_reset = bar_top + bar_h + gap
+        has_reset = any(not col["warn"] and col["reset"] for col in cols)
+        content_bottom = y_reset + small.metrics("linespace") if has_reset else bar_top + bar_h
 
         widths = []
         for col in cols:
@@ -398,7 +425,7 @@ class Badge:
                 top = measure_label(col["label"]) + int(8 * s) + measure_label(col["pct_text"])
                 widths.append(max(top, measure_small(col["reset"]), int(MIN_COL * s)))
         width = int(PAD_X * s) * 2 + sum(widths) + int(COL_GAP * s) * (len(cols) - 1)
-        height = int(HEIGHT * s)
+        height = content_bottom + pad_y
         canvas.config(width=width, height=height)
         rounded(canvas, 0, 0, width - 1, height - 1, int(8 * s), fill=BG, outline=BORDER)
 
@@ -410,17 +437,17 @@ class Badge:
                 x += col_width + int(COL_GAP * s)
                 continue
             color = level_color(col["pct"], col["stale"])
-            y1 = int(4 * s)
+            y1 = y_label
             canvas.create_text(x, y1, text=col["label"], anchor="nw", fill=DIM, font=label_font)
             canvas.create_text(x + col_width, y1, text=col["pct_text"], anchor="ne",
                                fill=color, font=pct_font)
-            bar_top, bar_bottom = int(18 * s), int(18 * s) + max(2, int(3 * s))
+            bar_bottom = bar_top + bar_h
             canvas.create_rectangle(x, bar_top, x + col_width, bar_bottom, fill=TRACK, outline="")
             fill_to = x + int(col_width * col["pct"] / 100.0)
             if fill_to > x:
                 canvas.create_rectangle(x, bar_top, fill_to, bar_bottom, fill=color, outline="")
             if col["reset"]:
-                canvas.create_text(x, int(22 * s), text=col["reset"], anchor="nw",
+                canvas.create_text(x, y_reset, text=col["reset"], anchor="nw",
                                    fill=FAINT, font=small_font)
             x += col_width + int(COL_GAP * s)
         self.size = (width, height)

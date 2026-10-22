@@ -41,6 +41,8 @@ class BadgeTests(unittest.TestCase):
             "2026. 10. 22. 오전 12:30 초기화": "곧 초기화",
             "기록 10/22 14:58\n3시간 후 재설정": "3시간 후",
             "기록 10/21 09:00\n오래된 기록 · Codex에서 갱신": "오래된 기록",
+            "(월요일) 오전 8:00에 재설정": "(월) 오전 8:00",
+            "주간 사용 한도와 동일 · 1시간 20분 후 초기화": "1시간 20분 후",
             "": "",
         }
         for sub, expected in cases.items():
@@ -52,6 +54,9 @@ class BadgeTests(unittest.TestCase):
         self.assertEqual(badges.short_label("모든 모델"), "주간")
         self.assertEqual(badges.short_label("주간 한도 · Spark"), "주간·Spark")
         self.assertEqual(badges.short_label("Current session", "en"), "Session")
+        self.assertEqual(badges.short_label("5시간 한도"), "세션")
+        self.assertEqual(badges.short_label("한도", "ko", "주간 사용 한도 초기화"), "주간")
+        self.assertEqual(badges.short_label("한도", "ko", "1시간 후 초기화"), "한도")
 
     def test_columns_cover_login_errors_and_bars(self):
         self.assertEqual(badges.columns({"code": "needs_login", "error": "x"})[0]["label"], "로그인 필요")
