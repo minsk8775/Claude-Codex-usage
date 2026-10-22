@@ -18,6 +18,7 @@ import ctypes
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import struct
@@ -37,6 +38,74 @@ USAGE_URL = "https://claude.ai/settings/usage"
 # set from --lang. Claude's own reset text is scraped from the page and follows
 # the account's language.
 LANG = "ko"
+
+
+def t(ko, en):
+    """Pick the Korean or English message for the current --lang."""
+    return en if LANG == "en" else ko
+
+
+# Reset lines are scraped from the pages and follow each account's language;
+# turn the common forms into the language picked in the widget.
+_WEEKDAYS_KO = "월화수목금토일"
+_WEEKDAYS_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS_EN = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_KO_DATE_RE = re.compile(
+    r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})")
+_KO_REL_RE = re.compile(r"((?:\d+\s*(?:일|시간|분)\s*)+)후")
+_KO_CLOCK_RE = re.compile(r"(?:\(([월화수목금토일])(?:요일)?\)\s*)?(오전|오후)\s*(\d{1,2}):(\d{2})")
+_EN_REL_RE = re.compile(
+    r"\bin\s+((?:\d+\s*(?:days?|d|hours?|hrs?|h|minutes?|mins?|m)\b\s*)+)", re.IGNORECASE)
+_EN_CLOCK_RE = re.compile(
+    r"\b(?:(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\.?\s+)?(\d{1,2}):(\d{2})\s*([AP]M)", re.IGNORECASE)
+
+
+def _en_clock(hour, minute, meridiem):
+    return "%d:%s %s" % (int(hour), minute, "PM" if meridiem == "오후" else "AM")
+
+
+def localize_reset(text, lang=None):
+    """'2시간 12분 후 재설정' <-> 'Resets in 2 hr 12 min', etc. Unknown text is
+    returned unchanged."""
+    lang = lang or LANG
+    text = (text or "").strip()
+    if not text:
+        return text
+    if lang == "en" and re.search("[가-힣]", text):
+        match = _KO_DATE_RE.search(text)
+        if match:
+            _year, month, day, meridiem, hour, minute = match.groups()
+            clock = _en_clock(hour, minute, meridiem) if meridiem else "%s:%s" % (hour, minute)
+            return "Resets %s %d, %s" % (_MONTHS_EN[int(month) - 1], int(day), clock)
+        match = _KO_REL_RE.search(text)
+        if match:
+            parts = []
+            for number, unit in re.findall(r"(\d+)\s*(일|시간|분)", match.group(1)):
+                parts.append("%s %s" % (number, {"일": "d", "시간": "hr", "분": "min"}[unit]))
+            return "Resets in " + " ".join(parts)
+        match = _KO_CLOCK_RE.search(text)
+        if match:
+            weekday, meridiem, hour, minute = match.groups()
+            day = _WEEKDAYS_EN[_WEEKDAYS_KO.index(weekday)] + " " if weekday else ""
+            return "Resets %s%s" % (day, _en_clock(hour, minute, meridiem))
+        if re.search("곧", text):
+            return "Resets soon"
+        return text
+    if lang != "en" and re.search(r"[A-Za-z]", text) and re.search(r"reset", text, re.IGNORECASE):
+        match = _EN_REL_RE.search(text)
+        if match:
+            parts = []
+            for number, unit in re.findall(r"(\d+)\s*([a-z]+)", match.group(1), re.IGNORECASE):
+                unit = unit.lower()
+                parts.append(number + ("일" if unit.startswith("d") else "시간" if unit.startswith("h") else "분"))
+            return " ".join(parts) + " 후 재설정"
+        match = _EN_CLOCK_RE.search(text)
+        if match:
+            weekday, hour, minute, meridiem = match.groups()
+            day = "(%s) " % _WEEKDAYS_KO[_WEEKDAYS_EN.index(weekday[:3].title())] if weekday else ""
+            return "%s%s %d:%s에 재설정" % (day, "오후" if meridiem.upper() == "PM" else "오전", int(hour), minute)
+    return text
 
 LOCAL_DATA = os.environ.get("LOCALAPPDATA") or os.path.join(
     os.path.expanduser("~"), "AppData", "Local"
@@ -233,7 +302,7 @@ def find_browser():
         seen.add(normalized)
         if os.path.isfile(path):
             return path
-    raise SyncError("Chrome 또는 Edge를 찾지 못했습니다")
+    raise SyncError(t("Chrome 또는 Edge를 찾지 못했습니다", "Chrome or Edge was not found"))
 
 
 def free_port():
@@ -395,7 +464,7 @@ def wait_for_debug(port, process=None, hidden_pid=None):
         if process is not None and process.poll() is not None:
             break
         time.sleep(0.2)
-    raise SyncError("사용량 브라우저를 시작하지 못했습니다")
+    raise SyncError(t("사용량 브라우저를 시작하지 못했습니다", "Could not start the usage browser"))
 
 
 def browser_flags(port, profile, visible):
@@ -483,7 +552,7 @@ def ensure_browser():
             hide_browser_windows(state.get("pid"))
         return state
     if not os.path.isfile(READY):
-        raise NeedsLogin("Claude 로그인이 필요합니다")
+        raise NeedsLogin(t("Claude 로그인이 필요합니다", "Claude sign-in is needed"))
     return launch_browser(visible=False)
 
 
@@ -547,24 +616,24 @@ class WebSocket:
         self.socket.sendall(request.encode("ascii"))
         headers = self._read_headers()
         if not headers.startswith(b"HTTP/1.1 101"):
-            raise SyncError("브라우저 연결이 거부되었습니다")
+            raise SyncError(t("브라우저 연결이 거부되었습니다", "The browser refused the connection"))
         expected = base64.b64encode(
             hashlib.sha1(
                 (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
             ).digest()
         )
         if b"sec-websocket-accept: " + expected.lower() not in headers.lower():
-            raise SyncError("브라우저 연결을 확인하지 못했습니다")
+            raise SyncError(t("브라우저 연결을 확인하지 못했습니다", "Could not verify the browser connection"))
 
     def _read_headers(self):
         data = b""
         while b"\r\n\r\n" not in data:
             chunk = self.socket.recv(4096)
             if not chunk:
-                raise SyncError("브라우저 연결이 닫혔습니다")
+                raise SyncError(t("브라우저 연결이 닫혔습니다", "The browser connection closed"))
             data += chunk
             if len(data) > 65536:
-                raise SyncError("브라우저 응답이 너무 큽니다")
+                raise SyncError(t("브라우저 응답이 너무 큽니다", "The browser response is too large"))
         headers, self.buffer = data.split(b"\r\n\r\n", 1)
         return headers
 
@@ -572,7 +641,7 @@ class WebSocket:
         while len(self.buffer) < size:
             chunk = self.socket.recv(max(4096, size - len(self.buffer)))
             if not chunk:
-                raise SyncError("브라우저 연결이 닫혔습니다")
+                raise SyncError(t("브라우저 연결이 닫혔습니다", "The browser connection closed"))
             self.buffer += chunk
         result, self.buffer = self.buffer[:size], self.buffer[size:]
         return result
@@ -620,7 +689,7 @@ class WebSocket:
                     byte ^ mask[index % 4] for index, byte in enumerate(payload)
                 )
             if opcode == 0x8:
-                raise SyncError("브라우저 연결이 종료되었습니다")
+                raise SyncError(t("브라우저 연결이 종료되었습니다", "The browser connection ended"))
             if opcode == 0x9:
                 self.send_frame(0xA, payload)
                 continue
@@ -671,7 +740,7 @@ class DevTools:
             if message.get("id") != request_id:
                 continue
             if "error" in message:
-                raise SyncError(message["error"].get("message", "브라우저 명령 실패"))
+                raise SyncError(message["error"].get("message", t("브라우저 명령 실패", "Browser command failed")))
             return message.get("result", {})
 
     def evaluate(self, expression):
@@ -685,7 +754,7 @@ class DevTools:
         )
         remote = result.get("result", {})
         if remote.get("subtype") == "error":
-            raise SyncError(remote.get("description", "페이지 읽기 실패"))
+            raise SyncError(remote.get("description", t("페이지 읽기 실패", "Failed to read the page")))
         return remote.get("value")
 
     def close(self):
@@ -771,10 +840,10 @@ def wait_for_usage(devtools):
             or "security verification" in body
             or "cloudflare" in body
         ):
-            raise NeedsLogin("Claude 로그인이 필요합니다")
+            raise NeedsLogin(t("Claude 로그인이 필요합니다", "Claude sign-in is needed"))
         time.sleep(0.5)
     if len(last.get("meters") or []) < 2:
-        raise SyncError("공식 사용량을 읽지 못했습니다")
+        raise SyncError(t("공식 사용량을 읽지 못했습니다", "Could not read the official usage"))
     return last
 
 
@@ -856,19 +925,19 @@ def pick_meters(meters):
 def make_payload(data):
     selected = pick_meters(data.get("meters") or [])
     if len(selected) < 2:
-        raise SyncError("공식 사용량 막대를 찾지 못했습니다")
+        raise SyncError(t("공식 사용량 막대를 찾지 못했습니다", "Official usage bars were not found"))
     bars = []
     for index, meter in enumerate(selected):
         pct = meter.get("pct")
         if not isinstance(pct, (int, float)):
-            raise SyncError("공식 사용량 값이 올바르지 않습니다")
+            raise SyncError(t("공식 사용량 값이 올바르지 않습니다", "Official usage value is invalid"))
         rounded = round(max(0, min(float(pct), 100)), 1)
         bars.append(
             {
                 "label": clean_label(meter.get("label"), index),
                 "pct": rounded,
                 "pct_text": "%g%%" % rounded,
-                "sub": (meter.get("reset") or "").strip(),
+                "sub": localize_reset(meter.get("reset")),
             }
         )
     return {
@@ -888,7 +957,7 @@ def sync_usage():
         target = page_target(state["port"])
         websocket_url = target.get("webSocketDebuggerUrl")
         if not websocket_url:
-            raise SyncError("사용량 페이지에 연결하지 못했습니다")
+            raise SyncError(t("사용량 페이지에 연결하지 못했습니다", "Could not connect to the usage page"))
         devtools = DevTools(websocket_url, state["port"])
         try:
             payload = make_payload(refresh_usage(devtools))
@@ -963,8 +1032,8 @@ def self_test():
                 assert payload["bars"][1]["label"] == "모든 모델"
                 assert payload["bars"][0]["pct"] == 100
                 assert payload["bars"][1]["pct"] == 69
-                assert payload["bars"][0]["sub"] == "Resets in 2 hours"
-                assert payload["bars"][1]["sub"] == "Resets in 19 hours"
+                assert payload["bars"][0]["sub"] == "2시간 후 재설정"  # page text follows --lang
+                assert payload["bars"][1]["sub"] == "19시간 후 재설정"
             finally:
                 devtools.close()
         finally:

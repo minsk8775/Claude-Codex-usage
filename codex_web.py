@@ -156,11 +156,40 @@ def parse_block(lines):
             "used": used, "reset": reset}
 
 
+_KO_LABEL_WORDS = (
+    (r"주간", "Weekly"), (r"일일", "Daily"), (r"월간", "Monthly"),
+    (r"(\d+)\s*시간", r"\1-hour"), (r"(\d+)\s*일", r"\1-day"),
+    (r"(사용\s*)?한도", "limit"),
+)
+
+
 def normalize_label(label):
-    """Compact the page label a little for the narrow widget."""
-    label = label.strip()
+    """Compact the page label for the narrow widget, in the widget's language.
+
+    The page follows the ChatGPT account language, so a Korean page shown in an
+    English widget gets its words translated ("주간 사용 한도" -> "Weekly limit").
+    """
+    label = (label or "").strip()
+    if not label:
+        return label
+    if LANG == "en" and re.search("[가-힣]", label):
+        for pattern, word in _KO_LABEL_WORDS:
+            label = re.sub(pattern, word, label)
+        label = re.sub(r"\s+", " ", label).strip()
+        if label.lower() == "limit":
+            return "Usage limit"
+        return label[:1].upper() + label[1:]
+    if LANG != "en" and not re.search("[가-힣]", label):
+        low = label.lower()
+        if "week" in low:
+            return "주간 한도"
+        match = re.search(r"(\d+)[\s-]*hour", low)
+        if match:
+            return "%s시간 한도" % match.group(1)
+        if re.fullmatch(r"(usage\s*)?limits?", low):
+            return "사용 한도"
     # "주간 사용 한도" -> "주간 한도"; keep others as-is.
-    return label.replace("사용 한도", "한도").strip() if label else label
+    return label.replace("사용 한도", "한도").strip()
 
 
 def make_payload(data):
@@ -171,7 +200,7 @@ def make_payload(data):
         parsed = parse_block(block)
         if parsed is None:
             continue
-        sub = parsed["reset"] or ("from ChatGPT" if en else "ChatGPT 공식 페이지")
+        sub = usage.localize_reset(parsed["reset"], LANG) or ("from ChatGPT" if en else "ChatGPT 공식 페이지")
         bars.append({
             "label": normalize_label(parsed["label"]),
             "pct": parsed["used"],
@@ -209,10 +238,10 @@ def wait_for_usage(devtools):
         if ("/auth" in url or "/login" in url or "login.openai" in url
                 or "log in" in body or "sign in" in body or "로그인" in body
                 or "continue with" in body or "이메일로 계속" in body):
-            raise NeedsLogin("ChatGPT 로그인이 필요합니다")
+            raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
         time.sleep(0.5)
     if not last.get("blocks"):
-        raise SyncError("사용 한도를 읽지 못했습니다")
+        raise SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
     return last
 
 
@@ -231,7 +260,7 @@ def sync_usage():
         target = codex_target(state["port"])
         websocket_url = target.get("webSocketDebuggerUrl")
         if not websocket_url:
-            raise SyncError("사용량 페이지에 연결하지 못했습니다")
+            raise SyncError(usage.t("사용량 페이지에 연결하지 못했습니다", "Could not connect to the usage page"))
         devtools = usage.DevTools(websocket_url, state["port"])
         try:
             payload = make_payload(refresh_usage(devtools))
@@ -269,7 +298,7 @@ FIXTURE_BLOCKS = [
 
 def self_test():
     global LANG
-    LANG = "ko"
+    LANG = usage.LANG = "ko"
     payload = make_payload({"blocks": FIXTURE_BLOCKS})
     assert len(payload["bars"]) == 1, payload
     bar = payload["bars"][0]
@@ -289,6 +318,13 @@ def self_test():
     shared = parse_block(["Codex와 Work는 동일한 사용 한도를 공유합니다.",
                           "주간 사용 한도", "35%", "남음", "9. 19. 초기화"])
     assert shared["label"] == "주간 사용 한도", shared
+    LANG = usage.LANG = "en"
+    english = make_payload({"blocks": FIXTURE_BLOCKS})["bars"][0]
+    assert english["label"] == "Weekly limit", english
+    assert english["sub"] == "Resets Sep 19, 5:10 PM", english
+    assert normalize_label("5시간 사용 한도") == "5-hour limit"
+    LANG = usage.LANG = "ko"
+    assert normalize_label("Weekly usage limit") == "주간 한도"
     print("Codex web usage self-test: OK")
 
 
@@ -303,6 +339,7 @@ def main():
     parser.add_argument("--lang", choices=("ko", "en"), default="ko")
     args = parser.parse_args()
     LANG = args.lang
+    usage.LANG = LANG  # shared browser helpers word their errors in this language
 
     if args.self_test:
         self_test()

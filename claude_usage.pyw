@@ -183,6 +183,12 @@ STRINGS = {
               "sign-in (dedicated browsers) AND the program folder itself.\n"
               "This cannot be undone.\n\nContinue?",
     },
+    "uninstall_done": {
+        "ko": "제거를 완료했습니다.\n자동 실행·바로가기, 설정, 로그인(전용 브라우저) 데이터를 지웠습니다.\n"
+              "확인을 누르면 프로그램 폴더도 삭제됩니다.",
+        "en": "Uninstall complete.\nThe startup entry, shortcuts, settings and sign-in "
+              "(dedicated browsers) were removed.\nPress OK to delete the program folder too.",
+    },
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
     "exit": {"ko": "종료", "en": "Exit"},
     "language": {"ko": "언어 (Language)", "en": "Language"},
@@ -410,6 +416,7 @@ class TrayIcon:
     MF_SEPARATOR = 0x0800
     MF_BYCOMMAND = 0x0000
     MF_CHECKED = 0x0008
+    MF_GRAYED = 0x0001
     MF_UNCHECKED = 0x0000
     TPM_RIGHTBUTTON = 0x0002
     TPM_RETURNCMD = 0x0100
@@ -460,8 +467,10 @@ class TrayIcon:
         user32 = ctypes.windll.user32
         lang = self.current_lang
         menu = user32.CreatePopupMenu()
+        # Badges-only mode has no widget, so its widget-only items are greyed out.
+        widget_item = self.MF_STRING | (self.MF_GRAYED if self.current_display == "badges" else 0)
         for menu_id, _mode, key in MODE_MENU:
-            user32.AppendMenuW(menu, self.MF_STRING, menu_id, tr(lang, key))
+            user32.AppendMenuW(menu, widget_item, menu_id, tr(lang, key))
         checked = next(
             (menu_id for menu_id, mode, _ in MODE_MENU if mode == self.current_mode),
             MODE_MENU[0][0],
@@ -470,7 +479,7 @@ class TrayIcon:
             menu, MODE_MENU[0][0], MODE_MENU[-1][0], checked, self.MF_BYCOMMAND
         )
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, 1003, tr(lang, "always_on_top"))
+        user32.AppendMenuW(menu, widget_item, 1003, tr(lang, "always_on_top"))
         user32.CheckMenuItem(
             menu,
             1003,
@@ -520,11 +529,11 @@ class TrayIcon:
         user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RECONNECT_ID, tr(lang, "fix_reconnect"))
         user32.AppendMenuW(menu, self.MF_POPUP, fix_menu, tr(lang, "fix_sync"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, RESET_POS_ID, tr(lang, "reset_position"))
+        user32.AppendMenuW(menu, widget_item, RESET_POS_ID, tr(lang, "reset_position"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, self.MF_STRING, UNINSTALL_ID, tr(lang, "uninstall"))
         user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, 1001, tr(lang, "show_hide"))
+        user32.AppendMenuW(menu, widget_item, 1001, tr(lang, "show_hide"))
         user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
         point = POINT()
         user32.GetCursorPos(ctypes.byref(point))
@@ -1725,12 +1734,12 @@ class UsageApp:
     def _draw_bar(self, pad, row_y, bar):
         """Draw one usage bar (label, percent, track/fill, reset text) at row_y."""
         pct = max(0.0, min(float(bar.get("pct", 0)), 100.0))
-        color = "#F1707B" if pct >= 90 else "#F5A85F" if pct >= 75 else "#4C8BF5"
+        color = "#F1707B" if pct >= 90 else "#F5A85F" if pct >= 75 else "#2F7DFF"
         if bar.get("stale"):
             color = "#999999"
         self.canvas.create_text(
             pad, row_y, text=str(bar.get("label", "")), anchor="w",
-            fill="#EEEEEE", font=self._font(10, "bold"),
+            fill="#FFFFFF", font=self._font(10, "bold"),
         )
         self.canvas.create_text(
             self.width - pad, row_y, text=str(bar.get("pct_text", "")), anchor="e",
@@ -1748,7 +1757,7 @@ class UsageApp:
             )
         self.canvas.create_text(
             pad, row_y + self._s(34), text=str(bar.get("sub", "")), anchor="w",
-            fill="#999999", font=self._font(8),
+            fill="#F2F2F7", font=self._font(8),
         )
 
     def _draw_frame(self, title):
@@ -2165,6 +2174,11 @@ class UsageApp:
         user32.SetWindowLongW(hwnd, -20, ex_style)
 
     def show(self):
+        # Badges-only mode keeps the widget hidden whatever asks for it (the
+        # tray icon, the desktop shortcut, a badge); only the 표시 방식 menu
+        # brings it back.
+        if self.display == "badges":
+            return
         self.root.deiconify()
         self.root.lift()
         self.root.attributes("-topmost", self.on_top)
@@ -2334,6 +2348,12 @@ def uninstall():
     """Stop the app and remove everything it installed: the widget/watcher, the
     dedicated reader browsers, the shortcuts, the saved settings/login, and the
     program folder itself."""
+    # Read the language before the settings are deleted.
+    try:
+        lang = json.loads(SETTINGS_FILE.read_text(encoding="utf-8-sig")).get("lang")
+    except (OSError, ValueError, AttributeError):
+        lang = None
+    lang = lang if lang in LANGS else DEFAULT_LANG
     send_control(MAIN_PORT, "exit")
     send_control(WATCH_PORT, "exit")
     time.sleep(0.3)
@@ -2360,11 +2380,7 @@ def uninstall():
             log_error(repr(error))
     root = tk.Tk()
     root.withdraw()
-    messagebox.showinfo(
-        "Claude Codex Usage",
-        "제거를 완료했습니다.\n자동 실행·바로가기, 설정, 로그인(전용 브라우저) 데이터를 지웠습니다.\n"
-        "확인을 누르면 프로그램 폴더도 삭제됩니다.",
-    )
+    messagebox.showinfo("Claude Codex Usage", tr(lang, "uninstall_done"))
     root.destroy()
     # Remove the program folder after we exit and release it.
     schedule_self_delete(BASE_DIR)

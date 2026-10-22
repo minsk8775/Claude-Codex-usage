@@ -83,7 +83,7 @@ def ensure_pywin32():
     except ImportError:
         pass
 
-    print("pywin32가 없어 설치합니다...")
+    print("pywin32 is missing; installing it...")
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "--user", "pywin32"]
     )
@@ -93,8 +93,8 @@ def ensure_pywin32():
         import win32com  # noqa: F401
     except ImportError as error:  # pragma: no cover - defensive
         raise RuntimeError(
-            "pywin32 설치 후에도 불러오지 못했습니다. "
-            "'python -m pip install pywin32'를 직접 실행해 보세요."
+            "pywin32 still could not be loaded after installing it. "
+            "Try running 'python -m pip install pywin32' yourself."
         ) from error
 
 
@@ -133,7 +133,7 @@ def desktop_path():
 def managed_pythonw():
     pythonw = Path(sys.base_prefix) / "pythonw.exe"
     if not pythonw.exists():
-        raise RuntimeError("pythonw.exe를 찾지 못했습니다: %s" % pythonw)
+        raise RuntimeError("pythonw.exe was not found: %s" % pythonw)
     return pythonw
 
 

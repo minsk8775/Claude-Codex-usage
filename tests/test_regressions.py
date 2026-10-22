@@ -72,11 +72,55 @@ class BadgeTests(unittest.TestCase):
         self.assertEqual((cols[0]["label"], cols[0]["reset"]), ("세션", "2시간 후"))
         self.assertEqual(cols[1]["pct"], 100.0)
 
+    def test_badges_only_mode_has_no_widget_entry(self):
+        app = badges.BadgeApp.__new__(badges.BadgeApp)
+        app.parent_pid = 0
+        app.widget_allowed = True
+        with patch.object(badges, "read_json", return_value={"display": "badges", "lang": "en"}), \
+                patch.object(badges.socket, "socket") as sock:
+            self.assertTrue(app.housekeeping())
+            self.assertFalse(app.widget_allowed)
+            app.open_widget()
+        sock.assert_not_called()
+        self.assertEqual(app.lang, "en")
+
     def test_level_colors_match_the_widget(self):
-        self.assertEqual(badges.level_color(50, False), "#4C8BF5")
+        self.assertEqual(badges.level_color(50, False), "#2F7DFF")
         self.assertEqual(badges.level_color(80, False), "#F5A85F")
         self.assertEqual(badges.level_color(95, False), "#F1707B")
         self.assertEqual(badges.level_color(95, True), "#999999")
+
+
+class LanguageTests(unittest.TestCase):
+    def test_page_reset_text_follows_the_chosen_language(self):
+        en = {
+            "2시간 12분 후 재설정": "Resets in 2 hr 12 min",
+            "(월요일) 오전 8:00에 재설정": "Resets Mon 8:00 AM",
+            "2026. 10. 24. 오후 5:10 초기화": "Resets Oct 24, 5:10 PM",
+            "Resets in 2 hours": "Resets in 2 hours",
+        }
+        for text, expected in en.items():
+            self.assertEqual(claude.localize_reset(text, "en"), expected, text)
+        ko = {
+            "Resets in 2 hr 12 min": "2시간 12분 후 재설정",
+            "Resets Mon 8:00 AM": "(월) 오전 8:00에 재설정",
+            "(월) 오전 8:00에 재설정": "(월) 오전 8:00에 재설정",
+        }
+        for text, expected in ko.items():
+            self.assertEqual(claude.localize_reset(text, "ko"), expected, text)
+
+    def test_reader_errors_follow_the_chosen_language(self):
+        with patch.object(claude, "LANG", "en"):
+            self.assertEqual(claude.t("한국어", "English"), "English")
+        with patch.object(claude, "LANG", "ko"):
+            self.assertEqual(claude.t("한국어", "English"), "한국어")
+
+    def test_english_badges_use_english_reset_text(self):
+        data = {"bars": [{"label": "Current session", "pct": 5, "sub": "Resets in 2 hr 12 min"},
+                         {"label": "All models", "pct": 55, "sub": "Resets Mon 8:00 AM"}]}
+        cols = badges.columns(data, "en", BadgeTests.NOW)
+        self.assertEqual([(c["label"], c["reset"]) for c in cols],
+                         [("Session", "2 hr 12 min"), ("Weekly", "Mon 8:00 AM")])
 
 
 class CodexTests(unittest.TestCase):
@@ -457,8 +501,16 @@ class WidgetTests(unittest.TestCase):
         app.events.put(("autoshow", None))
         app._poll_events()
         self.assertEqual(app.root.state(), "withdrawn")
-        app.events.put(("show", None))
-        app._poll_events()
+        # Nothing but the display setting brings the widget back: not the tray
+        # icon click (toggle), the desktop shortcut or a badge (show).
+        for action in ("show", "toggle"):
+            app.events.put((action, None))
+            app._poll_events()
+            self.assertEqual(app.root.state(), "withdrawn", action)
+        with patch.object(app, "_save_settings"), patch.object(app, "_update_badges"), \
+                patch.object(app, "start_sync"):
+            app.display_var = Mock()
+            app._set_display("both")
         self.assertEqual(app.root.state(), "normal")
 
     def test_widget_only_never_syncs_for_badges(self):

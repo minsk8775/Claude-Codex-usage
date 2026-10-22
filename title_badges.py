@@ -51,8 +51,8 @@ MIN_COL = 58
 BG = "#1E1E2E"
 BORDER = "#3B3B48"
 TRACK = "#3A3A48"
-DIM = "#9A9AAA"
-FAINT = "#7E7E8E"
+DIM = "#FFFFFF"     # labels (세션·주간)
+FAINT = "#F2F2F7"   # reset time line
 WARN = "#F1707B"
 TRANSPARENT = "#010203"
 
@@ -85,7 +85,7 @@ def level_color(pct, stale):
         return "#F1707B"
     if pct >= 75:
         return "#F5A85F"
-    return "#4C8BF5"
+    return "#2F7DFF"
 
 
 def short_label(label, lang="ko", hint=""):
@@ -518,7 +518,8 @@ class Badge:
         import tkinter as tk
 
         menu = tk.Menu(self.win, tearoff=0)
-        menu.add_command(label=tr(self.app.lang, "open_widget"), command=self.app.open_widget)
+        if self.app.widget_allowed:
+            menu.add_command(label=tr(self.app.lang, "open_widget"), command=self.app.open_widget)
         menu.add_command(label=tr(self.app.lang, "reset_pos"), command=self.reset_position)
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -546,6 +547,7 @@ class BadgeApp:
         self.root = tk.Tk()
         self.root.withdraw()
         self.lang = "ko"
+        self.widget_allowed = True  # False in badges-only mode
         self.positions = self.load_positions()
         self.badges = [Badge(self, key, words, cache) for key, words, cache in APPS]
         self.last_check = 0.0
@@ -567,6 +569,8 @@ class BadgeApp:
             pass
 
     def open_widget(self):
+        if not self.widget_allowed:
+            return  # badges-only mode: the widget stays hidden
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
                 client.sendto(b"show", ("127.0.0.1", MAIN_PORT))
@@ -579,6 +583,7 @@ class BadgeApp:
         self.lang = settings.get("lang") if settings.get("lang") in ("ko", "en") else "ko"
         if settings.get("display") == "widget":
             return False
+        self.widget_allowed = settings.get("display") != "badges"
         if self.parent_pid and not self.win.process_alive(self.parent_pid):
             return False
         return True
