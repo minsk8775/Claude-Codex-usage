@@ -10,24 +10,17 @@ A small Windows tool that shows your Claude and Codex subscription usage in an
 **always-on-top widget** above the taskbar and/or as **badges on the Claude and
 Codex app title bars**. It never calls a model, so checking usage costs no quota.
 
-```text
- 위젯 / Widget                      제목 표시줄 배지 / Title-bar badge
-┌──────────────────────────┐       ┌──────────────────────────────┐
-│ USAGE          ↻ ▾ ×     │       │ 세션      21%   주간     55%  │  – □ ×
-│ v0.9.0                   │       │ ▬▬▬░░░░░░░░░   ▬▬▬▬▬▬▬░░░░░░ │
-│ CLAUDE                   │       │ 2시간 12분 후   (월) 오전 8:00 │
-│ 현재 세션            21%  │       └──────────────────────────────┘
-│ █████░░░░░░░░░░░░░░░░░░░ │
-│ 2시간 12분 후 재설정       │
-│ 모든 모델            55%  │
-│ █████████████░░░░░░░░░░░ │
-│ (월) 오전 8:00에 재설정    │
-│ CODEX                    │
-│ 주간 한도            65%  │
-│ ███████████████░░░░░░░░░ │
-│ 2026. 10. 24. 오후 5:10 초기화 │
-└──────────────────────────┘
-```
+| 위젯 (한국어) / Widget (Korean) | 위젯 (영어) / Widget (English) |
+| :---: | :---: |
+| <img src="assets/widget-ko.png" alt="Claude Codex Usage widget in Korean" width="300"> | <img src="assets/widget-en.png" alt="Claude Codex Usage widget in English" width="300"> |
+
+**Claude 앱 제목 표시줄 배지 / Badge on the Claude app title bar**
+
+![Usage badge on the Claude app title bar, left of the app's toolbar](assets/badge-claude.png)
+
+**Codex 앱 제목 표시줄 배지 / Badge on the Codex app title bar**
+
+![Usage badge on the Codex app title bar, left of the window buttons](assets/badge-codex.png)
 
 ---
 
@@ -94,8 +87,9 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 | 앱 제목 표시줄 배지만 | 위젯 없이 Claude·Codex 앱 창의 배지로만 봅니다. 알림 아이콘, 바로가기, 배지를 눌러도 위젯은 뜨지 않고 `표시 방식`을 바꿀 때만 다시 나옵니다. 이 모드에서는 알림 아이콘 메뉴의 위젯 전용 항목이 회색으로 잠깁니다. |
 | 위젯 + 제목 표시줄 배지 (기본) | 둘 다 씁니다. |
 
-**배지**는 Claude 앱과 Codex(ChatGPT) 앱 창의 제목 표시줄 오른쪽, –/□/× 버튼 왼쪽에
-붙습니다. 한도별 사용량 %, 얇은 막대, 초기화까지 남은 시간을 보여 줍니다.
+**배지**는 Claude 앱과 Codex(ChatGPT) 앱 창의 제목 표시줄에 붙습니다. Claude 앱에서는
+앱 도구 모음(메뉴·폴더·공유 버튼) 왼쪽, Codex 앱에서는 –/□/× 버튼 왼쪽에 놓여 앱의
+버튼을 가리지 않습니다. 한도별 사용량 %, 얇은 막대, 초기화까지 남은 시간을 보여 줍니다.
 
 - 창을 옮기면 따라가고, 최소화하면 숨고, 다른 창에 가려지면 같이 가려집니다.
 - 드래그하면 위치를 앱별로 기억합니다. 배지 우클릭 → `배지 위치 초기화`로 되돌립니다.
@@ -319,8 +313,9 @@ Right-click anywhere on the widget or the notification-area icon → `Display`.
 | Title-bar badges only | No widget, just badges on the Claude and Codex app windows. The tray icon, the shortcut and the badges never bring the widget back; only changing `Display` does. Widget-only tray menu items are greyed out in this mode. |
 | Widget + title-bar badges (default) | Both. |
 
-**Badges** sit on the right of the Claude and Codex (ChatGPT) app title bars, left
-of the –/□/× buttons, and show each limit's percentage, a thin bar, and the time
+**Badges** sit on the Claude and Codex (ChatGPT) app title bars without covering
+the apps' own buttons: left of the app toolbar (menu, folder, Share) in Claude,
+and left of the –/□/× buttons in Codex. They show each limit's percentage, a thin bar, and the time
 left until reset.
 
 - They follow the window, hide when it is minimized, and are covered with it.

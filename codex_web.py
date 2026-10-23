@@ -100,6 +100,9 @@ _RESET = re.compile(r"초기화|resets?", re.IGNORECASE)
 _REMAIN = re.compile(r"남음|remaining|left", re.IGNORECASE)
 _USED = re.compile(r"사용됨|used", re.IGNORECASE)
 _SHARE = re.compile(r"공유|share|동일", re.IGNORECASE)
+_LABEL_PREFIX = re.compile(r"^(.{0,20}?(?:한도|limit))\s*(?=\d)", re.IGNORECASE)
+_GENERIC_LABEL = re.compile(r"^\s*((사용\s*)?한도|(usage\s*)?limit)\s*$", re.IGNORECASE)
+_POLITE_END = re.compile(r"(초기화|재설정)\s*됩니다\.?\s*$")
 
 
 def parse_block(lines):
@@ -124,6 +127,17 @@ def parse_block(lines):
         if _LIMIT.search(line) and not _SHARE.search(line) and len(line) <= 24
     ]
     label = min(label_candidates, key=len) if label_candidates else ""
+
+    # The page can render the limit name and the reset time as one run of text
+    # ("주간 사용 한도6일 16시간 후 초기화됩니다"). Split the name off; it is the
+    # more specific label when the heading is just "사용 한도".
+    match = _LABEL_PREFIX.match(reset)
+    if match:
+        prefix = match.group(1).strip()
+        reset = reset[match.end():].strip()
+        if not label or _GENERIC_LABEL.match(label):
+            label = prefix
+    reset = _POLITE_END.sub(r"\1", reset).strip()
 
     # Percent + remaining/used: prefer a standalone "35%" line and read the
     # neighbouring word; otherwise fall back to the first percent in the block.
@@ -318,6 +332,9 @@ def self_test():
     shared = parse_block(["Codex와 Work는 동일한 사용 한도를 공유합니다.",
                           "주간 사용 한도", "35%", "남음", "9. 19. 초기화"])
     assert shared["label"] == "주간 사용 한도", shared
+    merged = parse_block(["사용 한도", "13%", "남음", "주간 사용 한도6일 16시간 후 초기화됩니다"])
+    assert merged["label"] == "주간 사용 한도", merged
+    assert merged["reset"] == "6일 16시간 후 초기화", merged
     LANG = usage.LANG = "en"
     english = make_payload({"blocks": FIXTURE_BLOCKS})["bars"][0]
     assert english["label"] == "Weekly limit", english

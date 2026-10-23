@@ -35,14 +35,15 @@ class BadgeTests(unittest.TestCase):
 
     def test_reset_text_is_shortened_for_every_reader_format(self):
         cases = {
-            "2시간 12분 후 재설정": "2시간 12분 후",
+            "2시간 12분 후 재설정": "2시간 12분 후 초기화",
             "(월) 오전 8:00에 재설정": "(월) 오전 8:00",
-            "2026. 10. 24. 오후 5:10 초기화": "2일 2시간 후",
+            "2026. 10. 24. 오후 5:10 초기화": "2일 2시간 후 초기화",
             "2026. 10. 22. 오전 12:30 초기화": "곧 초기화",
-            "기록 10/22 14:58\n3시간 후 재설정": "3시간 후",
+            "기록 10/22 14:58\n3시간 후 재설정": "3시간 후 초기화",
             "기록 10/21 09:00\n오래된 기록 · Codex에서 갱신": "오래된 기록",
             "(월요일) 오전 8:00에 재설정": "(월) 오전 8:00",
-            "주간 사용 한도와 동일 · 1시간 20분 후 초기화": "1시간 20분 후",
+            "주간 사용 한도와 동일 · 1시간 20분 후 초기화": "1시간 20분 후 초기화",
+            "주간 사용 한도6일 16시간 후 초기화됩니다": "6일 16시간 후 초기화",
             "": "",
         }
         for sub, expected in cases.items():
@@ -69,7 +70,7 @@ class BadgeTests(unittest.TestCase):
         ]}
         cols = badges.columns(data, "ko", self.NOW)
         self.assertEqual(len(cols), 2)
-        self.assertEqual((cols[0]["label"], cols[0]["reset"]), ("세션", "2시간 후"))
+        self.assertEqual((cols[0]["label"], cols[0]["reset"]), ("세션", "2시간 후 초기화"))
         self.assertEqual(cols[1]["pct"], 100.0)
 
     def test_badges_only_mode_has_no_widget_entry(self):

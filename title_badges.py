@@ -43,6 +43,9 @@ APPS = (
 # Layout, in 100%-scale pixels (multiplied by the app window's DPI scale).
 TITLE_BAR = 40          # app title-bar height the badge is centred in
 BUTTONS = 150           # room kept free for the app's own –/□/× buttons
+# The Claude app also has its own toolbar (menu, folder, …, Share) left of the
+# window buttons; keep clear of it too.
+RIGHT_RESERVE = {"claude": 380, "codex": BUTTONS}
 PAD_X = 9
 PAD_Y = 3
 COL_GAP = 14
@@ -124,10 +127,10 @@ def remaining_text(seconds, lang="ko"):
             return "in %dh %dm" % (hours, minutes) if minutes else "in %dh" % hours
         return "in %dm" % max(minutes, 1)
     if days:
-        return "%d일 %d시간 후" % (days, hours) if hours else "%d일 후" % days
+        return "%d일 %d시간 후 초기화" % (days, hours) if hours else "%d일 후 초기화" % days
     if hours:
-        return "%d시간 %d분 후" % (hours, minutes) if minutes else "%d시간 후" % hours
-    return "%d분 후" % max(minutes, 1)
+        return "%d시간 %d분 후 초기화" % (hours, minutes) if minutes else "%d시간 후 초기화" % hours
+    return "%d분 후 초기화" % max(minutes, 1)
 
 
 _GENERIC = re.compile(r"^\s*((사용\s*)?한도|usage\s*limit|limit)?\s*$", re.IGNORECASE)
@@ -168,7 +171,7 @@ def short_reset(sub, lang="ko", now=None):
     # Pick out just the time part; page lines can carry extra words around it.
     match = _KO_REL.search(line)
     if match:
-        return re.sub(r"\s+", " ", match.group(1)).strip() + " 후"
+        return re.sub(r"\s+", " ", match.group(1)).strip() + " 후 초기화"
     match = _KO_CLOCK.search(line)
     if match:
         day = "(%s) " % match.group(2) if match.group(2) else ""
@@ -395,7 +398,11 @@ class Badge:
 
     # -- drawing -------------------------------------------------------------
     def font(self, size, weight="normal"):
-        return ("Segoe UI", -max(8, int(round(size * self.s))), weight)
+        # Segoe UI has no Hangul; Windows would substitute Malgun Gothic when
+        # drawing, but text is measured with Segoe UI and came out too narrow, so
+        # the badge clipped Korean text. Use the Korean font outright.
+        family = "Segoe UI" if self.app.lang == "en" else "Malgun Gothic"
+        return (family, -max(8, int(round(size * self.s))), weight)
 
     def draw(self, cols):
         from tkinter import font as tkfont
@@ -423,7 +430,7 @@ class Badge:
                 widths.append(measure_label("⚠ " + col["label"]))
             else:
                 top = measure_label(col["label"]) + int(8 * s) + measure_label(col["pct_text"])
-                widths.append(max(top, measure_small(col["reset"]), int(MIN_COL * s)))
+                widths.append(max(top, measure_small(col["reset"]) + int(2 * s), int(MIN_COL * s)))
         width = int(PAD_X * s) * 2 + sum(widths) + int(COL_GAP * s) * (len(cols) - 1)
         height = content_bottom + pad_y
         canvas.config(width=width, height=height)
@@ -489,7 +496,7 @@ class Badge:
             x = rect.right - int(offset[0] * self.s)
             y = rect.top + int(offset[1] * self.s)
         else:
-            x = rect.right - int(BUTTONS * self.s) - width
+            x = rect.right - int(RIGHT_RESERVE.get(self.key, BUTTONS) * self.s) - width
             y = rect.top + max(0, (int(TITLE_BAR * self.s) - height) // 2)
         self.win.geometry("+%d+%d" % (x, y))
 
