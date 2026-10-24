@@ -5,11 +5,6 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
-### Fixed
-- **pywin32를 처음 설치할 때 `install.cmd`가 실패하던 문제**: pywin32를 설치한 직후 같은
-  실행 안에서 `pywintypes`를 못 찾아 `pywin32 still could not be loaded` 오류가 났습니다.
-  설치 직후 pywin32 경로를 바로 읽어 들여 한 번에 설치됩니다.
-
 ## [0.9.0] - 2026-10-22
 
 ### Added
@@ -20,7 +15,8 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
     앱이 켜질 때도, 알림 아이콘·바탕화면 바로가기·배지를 눌러도 위젯이 뜨지 않으며
     **`표시 방식`을 바꿀 때만** 다시 나옵니다. 동기화는 켜져 있는 앱만 합니다.
   - **위젯 + 제목 표시줄 배지** (기본): 둘 다.
-- 배지는 Claude 앱·Codex(ChatGPT) 앱 창의 제목 표시줄 오른쪽(–/□/× 버튼 왼쪽)에 붙어,
+- 배지는 Claude 앱·Codex(ChatGPT) 앱 창의 제목 표시줄에 앱 버튼을 가리지 않게 붙어
+  (Claude는 앱 도구 모음 왼쪽, Codex는 –/□/× 버튼 왼쪽),
   한도별 **사용량 %, 얇은 막대, 초기화까지 남은 시간**을 보여줍니다. 색은 위젯과 같아요
   (75% 이상 주황, 90% 이상 빨강).
   - 앱 창에 "소유된" 창이라 **창을 옮기면 따라가고, 다른 창에 가려지면 같이 가려지며,
@@ -34,6 +30,9 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
     사용량 캐시만 읽고, 앱이나 쿠키·토큰은 건드리지 않습니다.
 
 ### Fixed
+- **pywin32를 처음 설치할 때 `install.cmd`가 실패하던 문제**: pywin32를 설치한 직후 같은
+  실행 안에서 `pywintypes`를 못 찾아 `pywin32 still could not be loaded` 오류가 났습니다.
+  설치 직후 pywin32 경로를 바로 읽어 들여 한 번에 설치됩니다.
 - **Claude 배지가 앱의 공유·폴더 버튼을 가리던 문제**: Claude 앱은 –/□/× 왼쪽에 자체
   도구 모음이 있어, 기본 위치를 그 도구 모음 왼쪽으로 옮겼습니다.
 - **Codex 배지 글자가 오른쪽에서 잘리던 문제**: 한글이 없는 Segoe UI로 폭을 재서 한글이
