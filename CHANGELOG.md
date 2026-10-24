@@ -5,6 +5,11 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+- **pywin32를 처음 설치할 때 `install.cmd`가 실패하던 문제**: pywin32를 설치한 직후 같은
+  실행 안에서 `pywintypes`를 못 찾아 `pywin32 still could not be loaded` 오류가 났습니다.
+  설치 직후 pywin32 경로를 바로 읽어 들여 한 번에 설치됩니다.
+
 ## [0.9.0] - 2026-10-22
 
 ### Added

@@ -87,6 +87,15 @@ def ensure_pywin32():
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "--user", "pywin32"]
     )
+    # pywin32 puts its folders on sys.path through a .pth file, which Python
+    # only reads at startup; read it now so this same run can import it.
+    import importlib
+    import site
+
+    for folder in [site.getusersitepackages(), *site.getsitepackages()]:
+        if os.path.isdir(folder):
+            site.addsitedir(folder)
+    importlib.invalidate_caches()
 
     try:
         import pythoncom  # noqa: F401
