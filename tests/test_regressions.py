@@ -85,6 +85,15 @@ class BadgeTests(unittest.TestCase):
         sock.assert_not_called()
         self.assertEqual(app.lang, "en")
 
+    def test_claude_only_view_shows_only_the_claude_badge(self):
+        app = badges.BadgeApp.__new__(badges.BadgeApp)
+        app.parent_pid = 0
+        for mode, shown in (("claude", {"claude"}), ("codex", {"codex"}),
+                            ("auto", {"claude", "codex"}), ("both_stacked", {"claude", "codex"})):
+            with patch.object(badges, "read_json", return_value={"display": "badges", "mode": mode}):
+                app.housekeeping()
+            self.assertEqual(app.shown_keys, shown, mode)
+
     def test_level_colors_match_the_widget(self):
         self.assertEqual(badges.level_color(50, False), "#2F7DFF")
         self.assertEqual(badges.level_color(80, False), "#F5A85F")
@@ -538,6 +547,14 @@ class WidgetTests(unittest.TestCase):
             self.assertFalse(state.exists())
             self.assertFalse(browser.exists())
             self.assertFalse(any(link.exists() for link in links))
+
+    def test_badges_only_view_mode_narrows_synced_apps(self):
+        app = self.app()
+        app.display = "badges"
+        app.mode = "codex"
+        app._known_app_keys = {"claude", "codex"}
+        app.root.withdraw()
+        self.assertEqual([s["key"] for s in app._visible_sources()], ["codex"])
 
     def test_widget_only_never_syncs_for_badges(self):
         app = self.app()

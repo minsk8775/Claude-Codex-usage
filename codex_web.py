@@ -102,7 +102,10 @@ _USED = re.compile(r"사용됨|used", re.IGNORECASE)
 _SHARE = re.compile(r"공유|share|동일", re.IGNORECASE)
 _LABEL_PREFIX = re.compile(r"^(.{0,20}?(?:한도|limit))\s*(?=\d)", re.IGNORECASE)
 _GENERIC_LABEL = re.compile(r"^\s*((사용\s*)?한도|(usage\s*)?limit)\s*$", re.IGNORECASE)
-_POLITE_END = re.compile(r"(초기화|재설정)\s*됩니다\.?\s*$")
+# Everything after the reset word is page noise run into the same line
+# ("…후 초기화됩니다37% 남음"); keep the line up to "초기화"/"재설정".
+_RESET_WORD = re.compile(r"초기화|재설정")
+_TRAILING_PCT = re.compile(r"\s*\d+(?:\.\d+)?\s*%.*$")
 
 
 def parse_block(lines):
@@ -137,7 +140,10 @@ def parse_block(lines):
         reset = reset[match.end():].strip()
         if not label or _GENERIC_LABEL.match(label):
             label = prefix
-    reset = _POLITE_END.sub(r"\1", reset).strip()
+    match = _RESET_WORD.search(reset)
+    if match:
+        reset = reset[:match.end()]
+    reset = _TRAILING_PCT.sub("", reset).strip()
 
     # Percent + remaining/used: prefer a standalone "35%" line and read the
     # neighbouring word; otherwise fall back to the first percent in the block.
@@ -335,6 +341,11 @@ def self_test():
     merged = parse_block(["사용 한도", "13%", "남음", "주간 사용 한도6일 16시간 후 초기화됩니다"])
     assert merged["label"] == "주간 사용 한도", merged
     assert merged["reset"] == "6일 16시간 후 초기화", merged
+    tail = parse_block(["주간 사용 한도", "37%", "남음", "6일 5시간 후 초기화됩니다37% 남음"])
+    assert tail["reset"] == "6일 5시간 후 초기화", tail
+    assert tail["used"] == 63.0, tail
+    english = parse_block(["Weekly limit", "37%", "left", "Resets in 6 days 37% left"])
+    assert english["reset"] == "Resets in 6 days", english
     LANG = usage.LANG = "en"
     english = make_payload({"blocks": FIXTURE_BLOCKS})["bars"][0]
     assert english["label"] == "Weekly limit", english

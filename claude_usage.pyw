@@ -205,6 +205,12 @@ STRINGS = {
 }
 
 
+def badge_keys(mode):
+    """Which apps get a title-bar badge in a view mode: 'Claude only' and
+    'Codex only' narrow the badges too; every other mode shows both."""
+    return (mode,) if mode in ("claude", "codex") else ("claude", "codex")
+
+
 def tr(lang, key):
     """Translate a UI string key for the given language, falling back to Korean."""
     entry = STRINGS.get(key)
@@ -487,8 +493,11 @@ class TrayIcon:
         menu = user32.CreatePopupMenu()
         # Badges-only mode has no widget, so its widget-only items are greyed out.
         widget_item = self.MF_STRING | (self.MF_GRAYED if self.current_display == "badges" else 0)
-        for menu_id, _mode, key in MODE_MENU:
-            user32.AppendMenuW(menu, widget_item, menu_id, tr(lang, key))
+        # The view mode also picks which badges show (Claude only / Codex only /
+        # both), so it stays usable there; only the arrow-paged view is widget-only.
+        for menu_id, mode, key in MODE_MENU:
+            item = widget_item if mode == "both_paged" else self.MF_STRING
+            user32.AppendMenuW(menu, item, menu_id, tr(lang, key))
         checked = next(
             (menu_id for menu_id, mode, _ in MODE_MENU if mode == self.current_mode),
             MODE_MENU[0][0],
@@ -1409,7 +1418,7 @@ class UsageApp:
         if self.display == "badges" and self.root.state() == "withdrawn":
             wanted = set()
         if self.display in ("badges", "both"):
-            wanted |= set(self._known_app_keys)
+            wanted |= set(self._known_app_keys) & set(badge_keys(self.mode))
         return [source for source in SOURCES if source["key"] in wanted]
 
     def _t(self, key):

@@ -84,7 +84,7 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 | 방식 | 설명 |
 | --- | --- |
 | 위젯만 | 작업표시줄 위에 떠 있는 위젯만 씁니다. |
-| 앱 제목 표시줄 배지만 | 위젯 없이 Claude·Codex 앱 창의 배지로만 봅니다. 알림 아이콘, 바로가기, 배지를 눌러도 위젯은 뜨지 않고 `표시 방식`을 바꿀 때만 다시 나옵니다. 이 모드에서는 알림 아이콘 메뉴의 위젯 전용 항목이 회색으로 잠깁니다. |
+| 앱 제목 표시줄 배지만 | 위젯 없이 Claude·Codex 앱 창의 배지로만 봅니다. 알림 아이콘, 바로가기, 배지를 눌러도 위젯은 뜨지 않고 `표시 방식`을 바꿀 때만 다시 나옵니다. 이 모드에서는 알림 아이콘 메뉴의 위젯 전용 항목(항상 위, 위치 초기화, 표시/숨기기, 좌우 전환)이 회색으로 잠깁니다. |
 | 위젯 + 제목 표시줄 배지 (기본) | 둘 다 씁니다. |
 
 **배지**는 Claude 앱과 Codex(ChatGPT) 앱 창의 제목 표시줄에 붙습니다. Claude 앱에서는
@@ -95,6 +95,8 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 - 드래그하면 위치를 앱별로 기억합니다. 배지 우클릭 → `배지 위치 초기화`로 되돌립니다.
 - 배지를 더블클릭하면 위젯이 열립니다(배지만 모드에서는 제외).
 - 앱이 켜져 있을 때만 그 앱의 사용량을 동기화합니다.
+- 보기 모드의 `Claude만 보기` / `Codex만 보기`는 배지에도 적용돼, 고른 앱의 배지만 나옵니다.
+  나머지 모드에서는 두 앱 모두 배지가 나옵니다.
 
 ### 보기 모드 (위젯)
 
@@ -310,7 +312,7 @@ Right-click anywhere on the widget or the notification-area icon → `Display`.
 | Mode | What it does |
 | --- | --- |
 | Widget only | Only the floating widget above the taskbar. |
-| Title-bar badges only | No widget, just badges on the Claude and Codex app windows. The tray icon, the shortcut and the badges never bring the widget back; only changing `Display` does. Widget-only tray menu items are greyed out in this mode. |
+| Title-bar badges only | No widget, just badges on the Claude and Codex app windows. The tray icon, the shortcut and the badges never bring the widget back; only changing `Display` does. Widget-only tray menu items (always on top, reset position, show/hide, arrows view) are greyed out in this mode. |
 | Widget + title-bar badges (default) | Both. |
 
 **Badges** sit on the Claude and Codex (ChatGPT) app title bars without covering
@@ -323,6 +325,8 @@ left until reset.
   position` puts it back.
 - Double-click a badge to open the widget (except in badges-only mode).
 - Only apps that are running are synced for their badges.
+- The `Claude only` / `Codex only` view modes apply to badges too, so only that
+  app's badge shows; every other view mode shows both.
 
 ### View modes (widget)
 

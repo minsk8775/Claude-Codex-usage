@@ -555,6 +555,7 @@ class BadgeApp:
         self.root.withdraw()
         self.lang = "ko"
         self.widget_allowed = True  # False in badges-only mode
+        self.shown_keys = {"claude", "codex"}
         self.positions = self.load_positions()
         self.badges = [Badge(self, key, words, cache) for key, words, cache in APPS]
         self.last_check = 0.0
@@ -591,6 +592,9 @@ class BadgeApp:
         if settings.get("display") == "widget":
             return False
         self.widget_allowed = settings.get("display") != "badges"
+        # The widget's "Claude only" / "Codex only" view narrows the badges too.
+        mode = settings.get("mode")
+        self.shown_keys = {mode} if mode in ("claude", "codex") else {"claude", "codex"}
         if self.parent_pid and not self.win.process_alive(self.parent_pid):
             return False
         return True
@@ -603,6 +607,10 @@ class BadgeApp:
                 self.root.destroy()
                 return
         for badge in self.badges:
+            if badge.key not in self.shown_keys:
+                if badge.win.state() != "withdrawn":
+                    badge.win.withdraw()
+                continue
             try:
                 badge.tick(self.lang)
             except Exception as error:
