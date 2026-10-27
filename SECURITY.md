@@ -113,7 +113,8 @@ not a substitute for checking what is being committed.
   checks and process-identity checks do not protect against a hostile program
   that can already modify your files. Do not use this profile for other browsing.
 - **The host is trusted.** The app uses only the Python standard library and
-  Windows' own components (installation creates its shortcuts through PowerShell).
+  Windows' own components (installation creates its shortcuts through the Windows
+  shell-link interface, via ctypes).
   Windows, Python, Git and Chrome/Edge are outside this repository's security
   boundary.
 - **Applying an update trusts the upstream maintainer.** The widget never installs

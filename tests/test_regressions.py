@@ -3,9 +3,7 @@ import importlib.machinery
 import importlib.util
 import os
 import queue
-import shutil
 import socket
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -488,26 +486,29 @@ class WidgetTests(unittest.TestCase):
         self.assertEqual([s["key"] for s in app._visible_sources()], ["codex"])
 
     def test_installer_creates_a_working_shortcut(self):
+        import ctypes
         installer = load("tested_install", "install.py")
+        # A folder name outside the CI machine's code page (it is English Windows).
         with tempfile.TemporaryDirectory(prefix="ccu shortcut '문서' ") as temp:
             link = Path(temp) / "Claude Codex Usage.lnk"
-            with patch.object(installer, "STATE_DIR", Path(temp) / "state"):
+            state = Path(temp) / "state"
+            with patch.object(installer, "STATE_DIR", state):
                 installer.create_shortcut(link, Path(sys.executable), '"%s" --watch' % installer.APP_SCRIPT, "test")
             self.assertTrue(link.exists())
-            # WScript.Shell cannot open that path either; read a copy.
-            copy = Path(tempfile.mkdtemp(prefix="ccu-read-")) / "copy.lnk"
-            self.addCleanup(shutil.rmtree, copy.parent, True)
-            shutil.copy(link, copy)
-            read = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
-                 "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK);"
-                 "$s.TargetPath; $s.Arguments; $s.WorkingDirectory"],
-                env=dict(os.environ, LNK=str(copy)), capture_output=True, encoding="utf-8", check=True,
-            ).stdout.splitlines()
-            self.assertEqual(Path(read[0]).resolve(), Path(sys.executable).resolve())
-            self.assertTrue(read[1].endswith("--watch"))
-            self.assertEqual(Path(read[2]), Path(temp) / "state")
+            shell, persist = installer.shell_link()
+            try:
+                installer.com_method(persist, 5, ctypes.c_wchar_p, ctypes.c_ulong)(persist, str(link), 0)  # Load
+                fields = []
+                for index, extra in ((3, (ctypes.c_void_p, ctypes.c_ulong)), (10, ()), (8, ())):  # path, args, dir
+                    buffer = ctypes.create_unicode_buffer(1024)
+                    call = installer.com_method(shell, index, ctypes.c_wchar_p, ctypes.c_int, *extra)
+                    call(shell, buffer, 1024, *((None, 0) if extra else ()))
+                    fields.append(buffer.value)
+            finally:
+                installer.com_release(persist, shell)
+            self.assertEqual(Path(fields[0]).resolve(), Path(sys.executable).resolve())
+            self.assertTrue(fields[1].endswith("--watch"))
+            self.assertEqual(Path(fields[2]), state)  # the Korean folder name survives
 
     def test_codex_app_is_recognised_and_claude_code_cli_is_not(self):
         rank = widget.app_rank

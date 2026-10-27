@@ -20,9 +20,10 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   `Resets Oct 24, 5:10 PM` 같은 날짜도 한국어처럼 남은 시간(`in 2d 2h`)으로 바꿉니다.
 
 ### Changed
-- **설치에 pywin32가 필요 없습니다.** 바로가기를 Windows 기본 기능(PowerShell의
-  `WScript.Shell`)으로 만들어, 이제 앱 전체가 Python 표준 라이브러리만 씁니다. pywin32
-  설치 단계와 그 오류가 사라졌습니다.
+- **설치에 pywin32가 필요 없습니다.** 바로가기를 Windows의 바로가기 인터페이스(IShellLinkW)를
+  Python 표준 `ctypes`로 직접 불러 만들어, 이제 앱 전체가 Python 표준 라이브러리만 씁니다.
+  pywin32 설치 단계와 그 오류가 사라졌고, 사용자·폴더 이름에 어떤 문자가 있어도 경로가
+  깨지지 않습니다(새 Windows 테스트로 확인).
 - 알림 아이콘 메뉴와 위젯 우클릭 메뉴를 메뉴 정의 하나로 만듭니다(겉모습·동작은 같음).
 - Codex 리더가 Claude 리더의 동기화 흐름을 그대로 복사해 두던 것을 공유하도록 정리하고,
   자동 업데이트 시절의 재시작 처리·아무도 보내지 않는 제어 명령·Windows가 아닌 환경용 분기

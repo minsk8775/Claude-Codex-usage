@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -28,20 +26,57 @@ STARTUP = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\
 APP_MAIN_PORT = 47671
 APP_WATCH_PORT = 47672
 
-# Windows' own shortcut object, driven from PowerShell. Values travel in
-# environment variables so paths with quotes or non-ASCII characters (an
-# apostrophe in the user name, a OneDrive '문서' folder) need no escaping.
-# Its Save() cannot write to a path with characters outside the system code
-# page, so it saves into a temporary folder and Python moves the file into place.
-SHORTCUT_SCRIPT = (
-    "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:CCU_LINK);"
-    "$s.TargetPath = $env:CCU_TARGET;"
-    "$s.Arguments = $env:CCU_ARGS;"
-    "$s.WorkingDirectory = $env:CCU_DIR;"
-    "$s.Description = $env:CCU_DESC;"
-    "$s.IconLocation = $env:CCU_ICON + ',0';"
-    "$s.Save()"
-)
+# Shortcuts are written through Windows' own shell-link object (IShellLinkW),
+# called with ctypes. Unlike WScript.Shell it keeps every path in Unicode, so a
+# user or folder name outside the system code page still works.
+CLSID_SHELL_LINK = "{00021401-0000-0000-C000-000000000046}"
+IID_SHELL_LINK_W = "{000214F9-0000-0000-C000-000000000046}"
+IID_PERSIST_FILE = "{0000010B-0000-0000-C000-000000000046}"
+
+
+def _guid(text):
+    import ctypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("Data1", ctypes.c_ulong), ("Data2", ctypes.c_ushort),
+                    ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+
+    guid = GUID()
+    ctypes.oledll.ole32.CLSIDFromString(text, ctypes.byref(guid))
+    return guid
+
+
+def com_method(obj, index, *argtypes):
+    """Method ``index`` of a COM object's vtable; a failing HRESULT raises OSError."""
+    import ctypes
+
+    vtable = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+    return ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p, *argtypes)(vtable[index])
+
+
+def shell_link():
+    """A new IShellLinkW and its IPersistFile; release both with com_release."""
+    import ctypes
+
+    try:
+        ctypes.oledll.ole32.CoInitialize(None)
+    except OSError:
+        pass  # already initialised in another mode; COM still works
+    link, persist = ctypes.c_void_p(), ctypes.c_void_p()
+    ctypes.oledll.ole32.CoCreateInstance(
+        ctypes.byref(_guid(CLSID_SHELL_LINK)), None, 1,  # CLSCTX_INPROC_SERVER
+        ctypes.byref(_guid(IID_SHELL_LINK_W)), ctypes.byref(link))
+    com_method(link, 0, ctypes.c_void_p, ctypes.c_void_p)(  # QueryInterface
+        link, ctypes.byref(_guid(IID_PERSIST_FILE)), ctypes.byref(persist))
+    return link, persist
+
+
+def com_release(*objects):
+    import ctypes
+
+    for obj in objects:
+        vtable = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+        ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtable[2])(obj)
 
 
 def _send_exit(port):
@@ -70,30 +105,22 @@ def managed_pythonw():
 
 
 def create_shortcut(path, pythonw, arguments, description):
+    from ctypes import c_int, c_wchar_p
+
     path.parent.mkdir(parents=True, exist_ok=True)
     # Start in the data folder, not the program folder, so a running widget or
     # watcher never stops the program folder from being deleted or replaced.
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    temp = Path(tempfile.mkdtemp(prefix="ccu-"))
-    env = dict(
-        os.environ,
-        CCU_LINK=str(temp / "shortcut.lnk"),
-        CCU_TARGET=str(pythonw),
-        CCU_ARGS=arguments,
-        CCU_DIR=str(STATE_DIR),
-        CCU_DESC=description,
-        CCU_ICON=str(ICON),
-    )
+    link, persist = shell_link()
     try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", SHORTCUT_SCRIPT],
-            env=env,
-            check=True,
-            timeout=60,
-        )
-        shutil.move(str(temp / "shortcut.lnk"), str(path))  # works across drives too
+        com_method(link, 20, c_wchar_p)(link, str(pythonw))            # SetPath
+        com_method(link, 11, c_wchar_p)(link, arguments)               # SetArguments
+        com_method(link, 9, c_wchar_p)(link, str(STATE_DIR))           # SetWorkingDirectory
+        com_method(link, 7, c_wchar_p)(link, description)              # SetDescription
+        com_method(link, 17, c_wchar_p, c_int)(link, str(ICON), 0)     # SetIconLocation
+        com_method(persist, 6, c_wchar_p, c_int)(persist, str(path), 1)  # Save
     finally:
-        shutil.rmtree(temp, ignore_errors=True)
+        com_release(persist, link)
 
 
 def start(pythonw, *arguments):
