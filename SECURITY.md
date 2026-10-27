@@ -121,9 +121,10 @@ not a substitute for checking what is being committed.
   your user can attach to the dedicated browser or read its profile. Origin
   checks and process-identity checks do not protect against a hostile program
   that can already modify your files. Do not use this profile for other browsing.
-- **Dependencies and the host are trusted.** Installation obtains `pywin32` from
-  the configured Python package index. Windows, Python, Git, Chrome/Edge and
-  installer dependencies are outside this repository's security boundary.
+- **The host is trusted.** The app uses only the Python standard library and
+  Windows' own components (installation creates its shortcuts through PowerShell).
+  Windows, Python, Git and Chrome/Edge are outside this repository's security
+  boundary.
 - **Applying an update trusts the upstream maintainer.** The widget never installs
   updates automatically, so a compromised repository cannot push code to your
   machine on its own. The residual trust is only in what *you* choose to install

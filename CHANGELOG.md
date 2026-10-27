@@ -5,6 +5,28 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-27
+
+### Fixed
+- **Codex 앱이 켜진 걸 위젯이 못 알아채던 문제**: 위젯은 실행 파일 이름에 `chatgpt`가
+  들어간 것만 Codex 앱으로 봤는데, Codex 데스크톱 앱은 `Codex.exe`입니다. 그래서 배지만
+  모드에서 Codex가 동기화되지 않거나, 자동 보기가 Codex를 놓치거나, Codex 부분 더블클릭이
+  앱으로 가지 않을 수 있었습니다. 이제 `Codex.exe`도 인식하고, 둘 다 켜져 있으면 Codex
+  앱 → ChatGPT → ChatGPT Classic 순으로 고릅니다.
+- **좁은 창에서 Claude 배지가 창 왼쪽 밖으로 밀려나던 문제**: 배지가 창 안에 머뭅니다.
+
+### Changed
+- **설치에 pywin32가 필요 없습니다.** 바로가기를 Windows 기본 기능(PowerShell의
+  `WScript.Shell`)으로 만들어, 이제 앱 전체가 Python 표준 라이브러리만 씁니다. pywin32
+  설치 단계와 그 오류가 사라졌습니다.
+- 알림 아이콘 메뉴와 위젯 우클릭 메뉴를 메뉴 정의 하나로 만듭니다(겉모습·동작은 같음).
+- Codex 리더의 `--self-test`를 정규 테스트(`tests/`)로 옮겼고, GitHub에 올릴 때마다
+  Windows에서 테스트가 자동으로 돕니다.
+
+### Removed
+- 0.1.0 이전 단독 위젯(Claude 전용·Codex 전용) 정리 기능과 `cleanup-legacy.cmd`.
+- 갱신이 멈춘 `HISTORY.md`와 쓰지 않는 `assets/screenshot.svg`.
+
 ## [0.9.0] - 2026-10-27
 
 첫 공식 릴리스입니다. 아래는 0.8.x에서 바뀐 내용입니다.
@@ -309,4 +331,5 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

@@ -22,7 +22,7 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 
-APP_VERSION = "0.9.0"
+APP_VERSION = "0.9.1"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
@@ -55,16 +55,7 @@ except (OSError, ImportError):
     pass
 STARTUP = Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs\Startup"
 DESKTOP_LINK = DESKTOP / "Claude Codex Usage.lnk"
-LEGACY_DESKTOP_LINK = DESKTOP / "Claude Codex Usage Toggle.lnk"
 STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
-# Shortcuts left by the older standalone Claude/Codex widgets (see install.py).
-LEGACY_LINKS = (
-    STARTUP / "Claude Usage Watcher.lnk",
-    STARTUP / "Codex Usage.lnk",
-    DESKTOP / "Claude Usage.lnk",
-    DESKTOP / "Claude Usage Toggle.lnk",
-    DESKTOP / "Codex Usage.lnk",
-)
 MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
@@ -211,6 +202,68 @@ def badge_keys(mode):
     return (mode,) if mode in ("claude", "codex") else ("claude", "codex")
 
 
+# Right-click menu ids -> the event the widget handles for them.
+SHOW_HIDE_ID = 1001
+EXIT_ID = 1002
+ON_TOP_ID = 1003
+MENU_ACTIONS = {
+    SHOW_HIDE_ID: ("toggle", None),
+    EXIT_ID: ("exit", None),
+    ON_TOP_ID: ("toggle_ontop", None),
+    SPARK_TOGGLE_ID: ("toggle_spark", None),
+    LANG_KO_ID: ("lang", "ko"),
+    LANG_EN_ID: ("lang", "en"),
+    CODEX_SRC_WEB_ID: ("codex_source", "web"),
+    CODEX_SRC_LOCAL_ID: ("codex_source", "local"),
+    RESET_POS_ID: ("reset_position", None),
+    UNINSTALL_ID: ("uninstall", None),
+    FIX_RETRY_ID: ("recover", "retry"),
+    FIX_RESTART_ID: ("recover", "restart"),
+    FIX_RECONNECT_ID: ("recover", "reconnect"),
+}
+MENU_ACTIONS.update({menu_id: ("mode", mode) for menu_id, mode, _key in MODE_MENU})
+MENU_ACTIONS.update({menu_id: ("display", mode) for menu_id, mode, _key in DISPLAY_MENU})
+
+
+def menu_spec(lang, mode, on_top, show_spark, display, codex_source):
+    """The right-click menu, shared by the notification icon (Win32) and the
+    widget (Tk). An item is (kind, id, label, checked, enabled) with kind
+    'cmd', 'check' or 'radio'; ('sub', label, items) is a submenu; None is a
+    separator. Badges-only mode has no widget, so widget-only items are
+    disabled there (view modes stay: they also pick which badges show)."""
+    widget = display != "badges"
+
+    def item(kind, menu_id, key, checked=False, enabled=True):
+        return (kind, menu_id, tr(lang, key), checked, enabled)
+
+    return [
+        *(item("radio", menu_id, key, value == mode, widget or value != "both_paged")
+          for menu_id, value, key in MODE_MENU),
+        None,
+        item("check", ON_TOP_ID, "always_on_top", on_top, widget),
+        item("check", SPARK_TOGGLE_ID, "show_spark", show_spark),
+        ("sub", tr(lang, "display_mode"),
+         [item("radio", menu_id, key, value == display) for menu_id, value, key in DISPLAY_MENU]),
+        ("sub", tr(lang, "language"),
+         [item("radio", LANG_KO_ID, "lang_ko", lang != "en"),
+          item("radio", LANG_EN_ID, "lang_en", lang == "en")]),
+        ("sub", tr(lang, "codex_source"),
+         [item("radio", CODEX_SRC_WEB_ID, "codex_source_web", codex_source != "local"),
+          item("radio", CODEX_SRC_LOCAL_ID, "codex_source_local", codex_source == "local")]),
+        ("sub", tr(lang, "fix_sync"),
+         [item("cmd", FIX_RETRY_ID, "fix_retry"),
+          item("cmd", FIX_RESTART_ID, "fix_restart"),
+          item("cmd", FIX_RECONNECT_ID, "fix_reconnect")]),
+        None,
+        item("cmd", RESET_POS_ID, "reset_position", enabled=widget),
+        None,
+        item("cmd", UNINSTALL_ID, "uninstall"),
+        None,
+        item("cmd", SHOW_HIDE_ID, "show_hide", enabled=widget),
+        item("cmd", EXIT_ID, "exit"),
+    ]
+
+
 def tr(lang, key):
     """Translate a UI string key for the given language, falling back to Korean."""
     entry = STRINGS.get(key)
@@ -218,7 +271,8 @@ def tr(lang, key):
         return key
     return entry.get(lang) or entry.get(DEFAULT_LANG) or key
 # Process-name substring -> usage source key, for the auto view (see above).
-APP_KEY_BY_NAME = (("claude", "claude"), ("chatgpt", "codex"))
+# The Codex desktop app runs as Codex.exe; the ChatGPT app also shows Codex usage.
+APP_KEY_BY_NAME = (("claude", "claude"), ("codex", "codex"), ("chatgpt", "codex"))
 
 
 def log_error(value):
@@ -487,81 +541,31 @@ class TrayIcon:
             self.NIM_SETVERSION, ctypes.byref(self.data)
         )
 
+    def _fill_menu(self, menu, items):
+        user32 = ctypes.windll.user32
+        for entry in items:
+            if entry is None:
+                user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
+            elif entry[0] == "sub":
+                submenu = user32.CreatePopupMenu()
+                self._fill_menu(submenu, entry[2])
+                user32.AppendMenuW(menu, self.MF_POPUP, submenu, entry[1])
+            else:
+                kind, menu_id, label, checked, enabled = entry
+                flags = self.MF_STRING | (0 if enabled else self.MF_GRAYED)
+                if checked and kind == "check":
+                    flags |= self.MF_CHECKED
+                user32.AppendMenuW(menu, flags, menu_id, label)
+                if checked and kind == "radio":
+                    user32.CheckMenuRadioItem(menu, menu_id, menu_id, menu_id, self.MF_BYCOMMAND)
+
     def _show_menu(self):
         user32 = ctypes.windll.user32
-        lang = self.current_lang
         menu = user32.CreatePopupMenu()
-        # Badges-only mode has no widget, so its widget-only items are greyed out.
-        widget_item = self.MF_STRING | (self.MF_GRAYED if self.current_display == "badges" else 0)
-        # The view mode also picks which badges show (Claude only / Codex only /
-        # both), so it stays usable there; only the arrow-paged view is widget-only.
-        for menu_id, mode, key in MODE_MENU:
-            item = widget_item if mode == "both_paged" else self.MF_STRING
-            user32.AppendMenuW(menu, item, menu_id, tr(lang, key))
-        checked = next(
-            (menu_id for menu_id, mode, _ in MODE_MENU if mode == self.current_mode),
-            MODE_MENU[0][0],
-        )
-        user32.CheckMenuRadioItem(
-            menu, MODE_MENU[0][0], MODE_MENU[-1][0], checked, self.MF_BYCOMMAND
-        )
-        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, widget_item, 1003, tr(lang, "always_on_top"))
-        user32.CheckMenuItem(
-            menu,
-            1003,
-            self.MF_BYCOMMAND
-            | (self.MF_CHECKED if self.current_on_top else self.MF_UNCHECKED),
-        )
-        user32.AppendMenuW(menu, self.MF_STRING, SPARK_TOGGLE_ID, tr(lang, "show_spark"))
-        user32.CheckMenuItem(
-            menu,
-            SPARK_TOGGLE_ID,
-            self.MF_BYCOMMAND
-            | (self.MF_CHECKED if self.current_show_spark else self.MF_UNCHECKED),
-        )
-        # Display submenu (widget / title-bar badges / both) as a radio group.
-        display_menu = user32.CreatePopupMenu()
-        for menu_id, _mode, key in DISPLAY_MENU:
-            user32.AppendMenuW(display_menu, self.MF_STRING, menu_id, tr(lang, key))
-        user32.CheckMenuRadioItem(
-            display_menu, DISPLAY_MENU[0][0], DISPLAY_MENU[-1][0],
-            next((i for i, m, _ in DISPLAY_MENU if m == self.current_display), DISPLAY_MENU[0][0]),
-            self.MF_BYCOMMAND,
-        )
-        user32.AppendMenuW(menu, self.MF_POPUP, display_menu, tr(lang, "display_mode"))
-        # Language submenu (Korean / English) as a radio group.
-        lang_menu = user32.CreatePopupMenu()
-        user32.AppendMenuW(lang_menu, self.MF_STRING, LANG_KO_ID, tr(lang, "lang_ko"))
-        user32.AppendMenuW(lang_menu, self.MF_STRING, LANG_EN_ID, tr(lang, "lang_en"))
-        user32.CheckMenuRadioItem(
-            lang_menu, LANG_KO_ID, LANG_EN_ID,
-            LANG_EN_ID if lang == "en" else LANG_KO_ID, self.MF_BYCOMMAND,
-        )
-        user32.AppendMenuW(menu, self.MF_POPUP, lang_menu, tr(lang, "language"))
-        # Codex data source submenu (official browser page / local CLI log).
-        codex_menu = user32.CreatePopupMenu()
-        user32.AppendMenuW(codex_menu, self.MF_STRING, CODEX_SRC_WEB_ID, tr(lang, "codex_source_web"))
-        user32.AppendMenuW(codex_menu, self.MF_STRING, CODEX_SRC_LOCAL_ID, tr(lang, "codex_source_local"))
-        user32.CheckMenuRadioItem(
-            codex_menu, CODEX_SRC_WEB_ID, CODEX_SRC_LOCAL_ID,
-            CODEX_SRC_LOCAL_ID if self.current_codex_source == "local" else CODEX_SRC_WEB_ID,
-            self.MF_BYCOMMAND,
-        )
-        user32.AppendMenuW(menu, self.MF_POPUP, codex_menu, tr(lang, "codex_source"))
-        # Sync-recovery submenu (retry / re-sign-in / restart the reader browser).
-        fix_menu = user32.CreatePopupMenu()
-        user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RETRY_ID, tr(lang, "fix_retry"))
-        user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RESTART_ID, tr(lang, "fix_restart"))
-        user32.AppendMenuW(fix_menu, self.MF_STRING, FIX_RECONNECT_ID, tr(lang, "fix_reconnect"))
-        user32.AppendMenuW(menu, self.MF_POPUP, fix_menu, tr(lang, "fix_sync"))
-        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, widget_item, RESET_POS_ID, tr(lang, "reset_position"))
-        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, self.MF_STRING, UNINSTALL_ID, tr(lang, "uninstall"))
-        user32.AppendMenuW(menu, self.MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, widget_item, 1001, tr(lang, "show_hide"))
-        user32.AppendMenuW(menu, self.MF_STRING, 1002, tr(lang, "exit"))
+        self._fill_menu(menu, menu_spec(
+            self.current_lang, self.current_mode, self.current_on_top,
+            self.current_show_spark, self.current_display, self.current_codex_source,
+        ))
         point = POINT()
         user32.GetCursorPos(ctypes.byref(point))
         user32.SetForegroundWindow(self.hwnd)
@@ -576,36 +580,8 @@ class TrayIcon:
         )
         user32.DestroyMenu(menu)
         user32.PostMessageW(self.hwnd, self.WM_NULL, 0, 0)
-        if command == 1001:
-            self.events.put(("toggle", None))
-        elif command == 1002:
-            self.events.put(("exit", None))
-        elif command == 1003:
-            self.events.put(("toggle_ontop", None))
-        elif command in DISPLAY_BY_ID:
-            self.events.put(("display", DISPLAY_BY_ID[command]))
-        elif command == SPARK_TOGGLE_ID:
-            self.events.put(("toggle_spark", None))
-        elif command == LANG_KO_ID:
-            self.events.put(("lang", "ko"))
-        elif command == LANG_EN_ID:
-            self.events.put(("lang", "en"))
-        elif command == CODEX_SRC_WEB_ID:
-            self.events.put(("codex_source", "web"))
-        elif command == CODEX_SRC_LOCAL_ID:
-            self.events.put(("codex_source", "local"))
-        elif command == RESET_POS_ID:
-            self.events.put(("reset_position", None))
-        elif command == UNINSTALL_ID:
-            self.events.put(("uninstall", None))
-        elif command == FIX_RETRY_ID:
-            self.events.put(("recover", "retry"))
-        elif command == FIX_RESTART_ID:
-            self.events.put(("recover", "restart"))
-        elif command == FIX_RECONNECT_ID:
-            self.events.put(("recover", "reconnect"))
-        elif command in MODE_BY_ID:
-            self.events.put(("mode", MODE_BY_ID[command]))
+        if command in MENU_ACTIONS:
+            self.events.put(MENU_ACTIONS[command])
 
     def _run(self):
         user32 = ctypes.windll.user32
@@ -854,8 +830,24 @@ def process_image_name(process_id):
         kernel32.CloseHandle(handle)
 
 
-def claude_app_window():
-    """Return the visible main window of the running Claude desktop app."""
+def app_rank(key, image):
+    """How well a process image matches a source's desktop app: 0 is best,
+    None is no match. Codex prefers the Codex app, then ChatGPT, then ChatGPT
+    Classic; the Claude Code CLI (also claude.exe) is not the Claude app."""
+    image = image.lower()
+    name = image.rsplit("\\", 1)[-1]
+    if key == "claude":
+        return 0 if "claude" in name and "\\claude-code\\" not in image else None
+    if "codex" in name:
+        return 0
+    if "chatgpt" in name:
+        return 2 if "classic" in name else 1
+    return None
+
+
+def app_window(key):
+    """The best visible, titled window of a source's desktop app, or 0.
+    Matches on the process image, so a browser tab titled 'Claude' is ignored."""
     user32 = ctypes.windll.user32
     user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
     user32.GetWindowThreadProcessId.argtypes = [
@@ -872,14 +864,13 @@ def claude_app_window():
             return True
         process_id = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
-        image = process_image_name(process_id.value).lower()
-        if image.endswith("\\claude.exe") and "\\claude-code\\" not in image:
-            found.append(hwnd)
-            return False
+        rank = app_rank(key, process_image_name(process_id.value))
+        if rank is not None:
+            found.append((rank, len(found), hwnd))
         return True
 
     user32.EnumWindows(visit, 0)
-    return found[0] if found else 0
+    return min(found)[2] if found else 0
 
 
 def focus_window(hwnd):
@@ -939,13 +930,13 @@ def get_installed_aumids():
         return set()
 
 
-def open_app_or_site(window_fn, aumid, site, installed):
+def open_app_or_site(key, aumid, site, installed):
     """Bring up a desktop app: focus its running window, else launch it by
     AUMID, else open its website. The site is used only when the app is known
     not to be installed; if install state is unknown we still try the app.
     """
     try:
-        hwnd = window_fn()
+        hwnd = app_window(key)
         if hwnd:
             focus_window(hwnd)
             return
@@ -958,44 +949,6 @@ def open_app_or_site(window_fn, aumid, site, installed):
             os.startfile(site)
         except OSError:
             pass
-
-
-def chatgpt_app_window():
-    """Return a running ChatGPT desktop app window, preferring the normal
-    ChatGPT app over ChatGPT Classic when both are open. Matches on the process
-    image name (e.g. ChatGPT.exe) so a browser tab titled 'ChatGPT' is ignored.
-    Returns 0 when no ChatGPT app is running.
-    """
-    user32 = ctypes.windll.user32
-    user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-    user32.GetWindowThreadProcessId.argtypes = [
-        wintypes.HWND,
-        ctypes.POINTER(wintypes.DWORD),
-    ]
-    user32.IsWindowVisible.argtypes = [wintypes.HWND]
-    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-    normal = []
-    classic = []
-
-    @WNDENUMPROC
-    def visit(hwnd, _lparam):
-        if not user32.IsWindowVisible(hwnd) or user32.GetWindowTextLengthW(hwnd) <= 0:
-            return True
-        process_id = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
-        image = process_image_name(process_id.value).lower()
-        if "chatgpt" in image:
-            (classic if "classic" in image else normal).append(hwnd)
-        return True
-
-    user32.EnumWindows(visit, 0)
-    if normal:
-        return normal[0]
-    if classic:
-        return classic[0]
-    return 0
-
-
 
 
 class UsageApp:
@@ -1108,12 +1061,6 @@ class UsageApp:
         self.update_available = False
         self.stack_regions = []
         self.bottom_anchor = saved_pos.get("bottom") if self.user_moved else None
-        self.mode_var = tk.StringVar(master=self.root, value=self.mode)
-        self.on_top_var = tk.BooleanVar(master=self.root, value=self.on_top)
-        self.lang_var = tk.StringVar(master=self.root, value=self.lang)
-        self.spark_var = tk.BooleanVar(master=self.root, value=self.show_spark)
-        self.display_var = tk.StringVar(master=self.root, value=self.display)
-        self.codex_source_var = tk.StringVar(master=self.root, value=self.codex_source)
         try:
             self._known_app_keys = running_app_keys()
         except Exception:
@@ -1445,7 +1392,6 @@ class UsageApp:
             return
         self.lang = lang
         self.tray.current_lang = lang
-        self.lang_var.set(lang)
         self._save_settings()
         self._draw()
         self._place()
@@ -1456,7 +1402,6 @@ class UsageApp:
     def _toggle_on_top(self):
         self.on_top = not self.on_top
         self.tray.current_on_top = self.on_top
-        self.on_top_var.set(self.on_top)
         try:
             self.root.attributes("-topmost", self.on_top)
         except tk.TclError:
@@ -1470,7 +1415,6 @@ class UsageApp:
             return
         self.display = display
         self.tray.current_display = display
-        self.display_var.set(display)
         self._save_settings()
         self._update_badges()
         if display == "badges":
@@ -1519,7 +1463,6 @@ class UsageApp:
     def _toggle_spark(self):
         self.show_spark = not self.show_spark
         self.tray.current_show_spark = self.show_spark
-        self.spark_var.set(self.show_spark)
         self._save_settings()
         # Re-sync Codex so its reader rebuilds the bars for the new setting.
         self.start_sync(False)
@@ -1588,7 +1531,6 @@ class UsageApp:
             return
         self.codex_source = source
         self.tray.current_codex_source = source
-        self.codex_source_var.set(source)
         # The two readers write the same cache; drop the stale one so the widget
         # shows "syncing" until the newly chosen reader reports.
         self.datas["codex"] = {"error": self._t("syncing")}
@@ -2015,13 +1957,9 @@ class UsageApp:
 
     def _open_source(self, key):
         if key == "codex":
-            open_app_or_site(
-                chatgpt_app_window, CHATGPT_AUMID, CODEX_SITE, self.app_ids
-            )
+            open_app_or_site("codex", CHATGPT_AUMID, CODEX_SITE, self.app_ids)
         else:
-            open_app_or_site(
-                claude_app_window, CLAUDE_AUMID, CLAUDE_SITE, self.app_ids
-            )
+            open_app_or_site("claude", CLAUDE_AUMID, CLAUDE_SITE, self.app_ids)
 
     def _on_double_click(self, event):
         if self._on_control(event.x, event.y):
@@ -2029,76 +1967,35 @@ class UsageApp:
         self.dragging = False
         self._open_source(self._double_click_target(event.y))
 
+    def _fill_tk_menu(self, menu, items):
+        for entry in items:
+            if entry is None:
+                menu.add_separator()
+            elif entry[0] == "sub":
+                submenu = tk.Menu(menu, tearoff=0)
+                self._fill_tk_menu(submenu, entry[2])
+                menu.add_cascade(label=entry[1], menu=submenu)
+            else:
+                kind, menu_id, label, checked, enabled = entry
+                options = {
+                    "label": label,
+                    "state": "normal" if enabled else "disabled",
+                    "command": lambda action=MENU_ACTIONS[menu_id]: self.events.put(action),
+                }
+                if kind == "cmd":
+                    menu.add_command(**options)
+                else:
+                    variable = tk.BooleanVar(master=menu, value=checked)
+                    menu.variables.append(variable)  # keep it alive while shown
+                    menu.add_checkbutton(variable=variable, **options)
+
     def _show_context_menu(self, x=None, y=None):
-        """The same menu the notification-area icon shows: view modes, always on
-        top, show/hide, exit."""
+        """The same menu the notification-area icon shows."""
         menu = tk.Menu(self.root, tearoff=0)
-        self.mode_var.set(self.mode)
-        for _menu_id, key, string_key in MODE_MENU:
-            menu.add_radiobutton(
-                label=self._t(string_key),
-                value=key,
-                variable=self.mode_var,
-                command=lambda k=key: self._set_mode(k),
-            )
-        menu.add_separator()
-        self.on_top_var.set(self.on_top)
-        menu.add_checkbutton(
-            label=self._t("always_on_top"),
-            variable=self.on_top_var,
-            command=self._toggle_on_top,
-        )
-        self.spark_var.set(self.show_spark)
-        menu.add_checkbutton(
-            label=self._t("show_spark"),
-            variable=self.spark_var,
-            command=self._toggle_spark,
-        )
-        self.display_var.set(self.display)
-        display_menu = tk.Menu(menu, tearoff=0)
-        for _menu_id, mode, string_key in DISPLAY_MENU:
-            display_menu.add_radiobutton(
-                label=self._t(string_key),
-                value=mode,
-                variable=self.display_var,
-                command=lambda m=mode: self._set_display(m),
-            )
-        menu.add_cascade(label=self._t("display_mode"), menu=display_menu)
-        # Language submenu (Korean / English).
-        self.lang_var.set(self.lang)
-        lang_menu = tk.Menu(menu, tearoff=0)
-        for code, string_key in (("ko", "lang_ko"), ("en", "lang_en")):
-            lang_menu.add_radiobutton(
-                label=self._t(string_key),
-                value=code,
-                variable=self.lang_var,
-                command=lambda c=code: self._set_lang(c),
-            )
-        menu.add_cascade(label=self._t("language"), menu=lang_menu)
-        # Codex data source (official browser page / local CLI log).
-        self.codex_source_var.set(self.codex_source)
-        codex_menu = tk.Menu(menu, tearoff=0)
-        for value, string_key in (("web", "codex_source_web"), ("local", "codex_source_local")):
-            codex_menu.add_radiobutton(
-                label=self._t(string_key),
-                value=value,
-                variable=self.codex_source_var,
-                command=lambda v=value: self._set_codex_source(v),
-            )
-        menu.add_cascade(label=self._t("codex_source"), menu=codex_menu)
-        # Sync-recovery submenu.
-        fix_menu = tk.Menu(menu, tearoff=0)
-        fix_menu.add_command(label=self._t("fix_retry"), command=lambda: self._recover("retry"))
-        fix_menu.add_command(label=self._t("fix_restart"), command=lambda: self._recover("restart"))
-        fix_menu.add_command(label=self._t("fix_reconnect"), command=lambda: self._recover("reconnect"))
-        menu.add_cascade(label=self._t("fix_sync"), menu=fix_menu)
-        menu.add_separator()
-        menu.add_command(label=self._t("reset_position"), command=self._reset_position)
-        menu.add_separator()
-        menu.add_command(label=self._t("uninstall"), command=self._uninstall)
-        menu.add_separator()
-        menu.add_command(label=self._t("show_hide"), command=self.toggle)
-        menu.add_command(label=self._t("exit"), command=self.exit)
+        menu.variables = []
+        self._fill_tk_menu(menu, menu_spec(
+            self.lang, self.mode, self.on_top, self.show_spark, self.display, self.codex_source,
+        ))
         if x is None:
             x = self.root.winfo_pointerx()
             y = self.root.winfo_pointery()
@@ -2454,7 +2351,7 @@ def uninstall():
         except Exception as error:
             log_error("uninstall close %s: %r" % (script.name, error))
     stop_leftover_processes()
-    for path in (STARTUP_LINK, DESKTOP_LINK, LEGACY_DESKTOP_LINK) + LEGACY_LINKS:
+    for path in (STARTUP_LINK, DESKTOP_LINK):
         try:
             path.unlink()
         except FileNotFoundError:

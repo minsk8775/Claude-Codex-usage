@@ -6,6 +6,7 @@ import json
 import os
 import queue
 import socket
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -27,6 +28,8 @@ def load(name, filename):
 codex = load("tested_codex", "codex_usage.py")
 claude = load("tested_claude", "usage.py")
 badges = load("tested_badges", "title_badges.py")
+sys.path.insert(0, str(REPO))  # codex_web imports usage
+web = load("tested_codex_web", "codex_web.py")
 widget = load("tested_widget", "claude_usage.pyw") if os.name == "nt" else None
 
 
@@ -131,6 +134,143 @@ class LanguageTests(unittest.TestCase):
         cols = badges.columns(data, "en", BadgeTests.NOW)
         self.assertEqual([(c["label"], c["reset"]) for c in cols],
                          [("Session", "2 hr 12 min"), ("Weekly", "Mon 8:00 AM")])
+
+
+CODEX_FIXTURE_LINES = [
+    # An early session line with no rate-limit snapshot yet.
+    {"timestamp": "2026-08-30T10:00:00Z", "type": "event_msg",
+     "payload": {"type": "token_count", "rate_limits": None,
+                 "total_token_usage": {"total_tokens": 10}}},
+    # A newer file might briefly write null again; we must not pick this over a
+    # real snapshot that is older in wall-clock terms.
+    {"timestamp": "2026-08-31T09:00:00Z", "type": "event_msg",
+     "payload": {"type": "token_count", "rate_limits": None}},
+    # The real, newest snapshot.
+    {"timestamp": "2026-08-31T12:34:00Z", "type": "event_msg",
+     "payload": {"type": "token_count",
+                 "rate_limits": {
+                     "limit_id": "codex",
+                     "primary": {"used_percent": 100.0, "window_minutes": 300,
+                                 "resets_at": 1000000000 + 2 * 3600},
+                     "secondary": {"used_percent": 69.0, "window_minutes": 10080,
+                                   "resets_at": 1000000000 + 19 * 3600},
+                     "plan_type": "pro"}}},
+]
+
+
+WEB_FIXTURE_BLOCKS = [
+    # The weekly shared limit as the page renders it (label / value / 남음 / reset).
+    ["주간 사용 한도", "35%", "남음", "2026. 9. 19. 오후 5:10 초기화"],
+    # A block that is not a usage limit (must be ignored: no reset marker).
+    ["Skills used", "100%"],
+]
+
+
+class ReaderFixtureTests(unittest.TestCase):
+    def test_local_reader_parses_a_synthetic_rollout(self):
+        # Moved from `codex_usage.py --self-test`.
+        with patch.object(codex, "LANG", "ko"):
+            with tempfile.TemporaryDirectory(prefix="codexusage-test-") as home:
+                day = os.path.join(codex.sessions_dir(home), "2026", "08", "31")
+                os.makedirs(day, exist_ok=True)
+                with open(os.path.join(day, "rollout-2026-08-31T12-30-00-abc.jsonl"),
+                          "w", encoding="utf-8") as handle:
+                    for line in CODEX_FIXTURE_LINES:
+                        handle.write(json.dumps(line) + "\n")
+
+                limits, event_epoch = codex.newest_snapshot(home)
+                assert limits is not None, "snapshot not found"
+                assert limits["plan_type"] == "pro"
+                # Pin 'now' so the reset text is deterministic regardless of today.
+                now = event_epoch
+                limits["primary"]["resets_at"] = now + 2 * 3600
+                limits["secondary"]["resets_at"] = now + 19 * 3600
+                payload = codex.make_payload(limits, event_epoch, now_epoch=now)
+                assert payload["bars"][0]["label"] == "현재 세션", payload["bars"][0]
+                assert payload["bars"][1]["label"] == "주간 한도", payload["bars"][1]
+                assert payload["bars"][0]["pct"] == 100.0
+                assert payload["bars"][1]["pct"] == 69.0
+                assert payload["bars"][0]["sub"].endswith("2시간 후 재설정"), payload["bars"][0]["sub"]
+                assert payload["bars"][1]["sub"].endswith("19시간 후 재설정"), payload["bars"][1]["sub"]
+                assert payload["plan_type"] == "pro"
+                # The general bucket carries no model tag.
+                assert "bucket_name" not in payload, payload
+
+                # A model-specific bucket gets a compact tag on its bars, and a fresher
+                # model bucket wins over an older general one (the real-world case that
+                # used to freeze the widget on a stale general value).
+                assert codex.bucket_tag({"limit_id": "codex"}) == ""
+                assert codex.bucket_tag({"limit_id": "codex_bengalfox",
+                                   "limit_name": "GPT-5.3-Codex-Spark"}) == "Spark"
+                spark = {"limit_id": "codex_bengalfox", "limit_name": "GPT-5.3-Codex-Spark",
+                         "primary": {"used_percent": 12.0, "window_minutes": 300,
+                                     "resets_at": now + 3 * 3600},
+                         "secondary": {"used_percent": 4.0, "window_minutes": 10080,
+                                       "resets_at": now + 5 * 86400}}
+                sp = codex.make_payload(spark, now, now_epoch=now)
+                assert sp["bars"][0]["label"] == "현재 세션 · Spark", sp["bars"][0]
+                assert sp["bars"][1]["label"] == "주간 한도 · Spark", sp["bars"][1]
+                assert sp["limit_id"] == "codex_bengalfox", sp
+                assert sp["bucket_name"] == "GPT-5.3-Codex-Spark", sp
+                with open(os.path.join(day, "rollout-2026-08-31T13-00-00-def.jsonl"),
+                          "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps({
+                        "timestamp": "2026-08-31T13:00:00Z", "type": "event_msg",
+                        "payload": {"type": "token_count", "rate_limits": {
+                            "limit_id": "codex_bengalfox",
+                            "limit_name": "GPT-5.3-Codex-Spark",
+                            "primary": {"used_percent": 7.0, "window_minutes": 300}}}}) + "\n")
+                picked, _ = codex.newest_snapshot(home)
+                assert picked.get("limit_id") == "codex_bengalfox", picked
+
+                # Window-label fallbacks for durations without a friendly name.
+                assert codex.window_label(1440) == "일일 한도"
+                assert codex.window_label(180) == "3시간 한도"
+                assert codex.window_label(90) == "90분 한도"
+                # Relative reset (older schema) resolves against the event time.
+                rel = codex.make_bar({"used_percent": 5, "window_minutes": 300,
+                                "resets_in_seconds": 3600}, now, now_epoch=now)
+                assert rel["sub"].endswith("1시간 후 재설정"), rel["sub"]
+
+    def test_web_reader_parses_page_blocks(self):
+        # Moved from `codex_web.py --self-test`.
+        self.addCleanup(setattr, web, "LANG", web.LANG)
+        self.addCleanup(setattr, web.usage, "LANG", web.usage.LANG)
+        web.LANG = web.usage.LANG = "ko"
+        payload = web.make_payload({"blocks": WEB_FIXTURE_BLOCKS})
+        assert len(payload["bars"]) == 1, payload
+        bar = payload["bars"][0]
+        assert bar["label"] == "주간 한도", bar
+        assert bar["pct"] == 65.0, bar          # 35% 남음 -> 65% 사용
+        assert bar["pct_text"] == "65%", bar
+        assert "초기화" in bar["sub"], bar
+        assert bar["stale"] is False, bar
+
+        # English "used" wording is taken as used, not converted.
+        used_block = web.parse_block(["Weekly limit", "42% used", "resets Sep 19"])
+        assert used_block["used"] == 42.0, used_block
+        # "left" wording is remaining -> converted.
+        left_block = web.parse_block(["Weekly limit", "70%", "left", "resets Sep 19"])
+        assert left_block["used"] == 30.0, left_block
+        # Shared-limit note is not mistaken for the label.
+        shared = web.parse_block(["Codex와 Work는 동일한 사용 한도를 공유합니다.",
+                              "주간 사용 한도", "35%", "남음", "9. 19. 초기화"])
+        assert shared["label"] == "주간 사용 한도", shared
+        merged = web.parse_block(["사용 한도", "13%", "남음", "주간 사용 한도6일 16시간 후 초기화됩니다"])
+        assert merged["label"] == "주간 사용 한도", merged
+        assert merged["reset"] == "6일 16시간 후 초기화", merged
+        tail = web.parse_block(["주간 사용 한도", "37%", "남음", "6일 5시간 후 초기화됩니다37% 남음"])
+        assert tail["reset"] == "6일 5시간 후 초기화", tail
+        assert tail["used"] == 63.0, tail
+        english = web.parse_block(["Weekly limit", "37%", "left", "Resets in 6 days 37% left"])
+        assert english["reset"] == "Resets in 6 days", english
+        web.LANG = web.usage.LANG = "en"
+        english = web.make_payload({"blocks": WEB_FIXTURE_BLOCKS})["bars"][0]
+        assert english["label"] == "Weekly limit", english
+        assert english["sub"] == "Resets Sep 19, 5:10 PM", english
+        assert web.normalize_label("5시간 사용 한도") == "5-hour limit"
+        web.LANG = web.usage.LANG = "ko"
+        assert web.normalize_label("Weekly usage limit") == "주간 한도"
 
 
 class CodexTests(unittest.TestCase):
@@ -530,13 +670,12 @@ class WidgetTests(unittest.TestCase):
             for folder in (state / "sub", browser / "BrowserProfile", program):
                 folder.mkdir(parents=True)
             (state / "settings.json").write_text('{"lang": "en"}', encoding="utf-8")
-            links = [root / name for name in ("startup.lnk", "desktop.lnk", "toggle.lnk", "old1.lnk", "old2.lnk")]
+            links = [root / name for name in ("startup.lnk", "desktop.lnk")]
             for link in links:
                 link.write_text("x")
             with patch.multiple(widget, STATE_DIR=state, SETTINGS_FILE=state / "settings.json",
                                 BROWSER_DATA_DIR=browser, BASE_DIR=program,
                                 STARTUP_LINK=links[0], DESKTOP_LINK=links[1],
-                                LEGACY_DESKTOP_LINK=links[2], LEGACY_LINKS=tuple(links[3:]),
                                 send_control=Mock(), wait_for_exit=Mock(), run_script=Mock(),
                                 stop_leftover_processes=Mock(), schedule_self_delete=Mock(),
                                 messagebox=Mock(), tk=Mock()):

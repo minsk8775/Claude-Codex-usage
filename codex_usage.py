@@ -27,7 +27,6 @@ so we scan recent files and keep the newest event that actually has a snapshot.
 
 Commands:
     codex_usage.py --sync       Read the newest snapshot and write codex_latest.json.
-    codex_usage.py --self-test  Parse a synthetic fixture offline (no ~/.codex needed).
 """
 
 import argparse
@@ -35,7 +34,6 @@ import glob
 import json
 import math
 import os
-import tempfile
 from datetime import datetime, timezone
 
 
@@ -477,110 +475,15 @@ def sync_usage(home=None, show_spark=False):
     return payload
 
 
-FIXTURE_LINES = [
-    # An early session line with no rate-limit snapshot yet.
-    {"timestamp": "2026-08-30T10:00:00Z", "type": "event_msg",
-     "payload": {"type": "token_count", "rate_limits": None,
-                 "total_token_usage": {"total_tokens": 10}}},
-    # A newer file might briefly write null again; we must not pick this over a
-    # real snapshot that is older in wall-clock terms.
-    {"timestamp": "2026-08-31T09:00:00Z", "type": "event_msg",
-     "payload": {"type": "token_count", "rate_limits": None}},
-    # The real, newest snapshot.
-    {"timestamp": "2026-08-31T12:34:00Z", "type": "event_msg",
-     "payload": {"type": "token_count",
-                 "rate_limits": {
-                     "limit_id": "codex",
-                     "primary": {"used_percent": 100.0, "window_minutes": 300,
-                                 "resets_at": 1000000000 + 2 * 3600},
-                     "secondary": {"used_percent": 69.0, "window_minutes": 10080,
-                                   "resets_at": 1000000000 + 19 * 3600},
-                     "plan_type": "pro"}}},
-]
-
-
-def self_test():
-    """Parse a synthetic rollout offline: no ~/.codex and no network needed."""
-    global LANG
-    LANG = "ko"  # assertions below pin the Korean strings
-    with tempfile.TemporaryDirectory(prefix="codexusage-test-") as home:
-        day = os.path.join(sessions_dir(home), "2026", "08", "31")
-        os.makedirs(day, exist_ok=True)
-        with open(os.path.join(day, "rollout-2026-08-31T12-30-00-abc.jsonl"),
-                  "w", encoding="utf-8") as handle:
-            for line in FIXTURE_LINES:
-                handle.write(json.dumps(line) + "\n")
-
-        limits, event_epoch = newest_snapshot(home)
-        assert limits is not None, "snapshot not found"
-        assert limits["plan_type"] == "pro"
-        # Pin 'now' so the reset text is deterministic regardless of today.
-        now = event_epoch
-        limits["primary"]["resets_at"] = now + 2 * 3600
-        limits["secondary"]["resets_at"] = now + 19 * 3600
-        payload = make_payload(limits, event_epoch, now_epoch=now)
-        assert payload["bars"][0]["label"] == "현재 세션", payload["bars"][0]
-        assert payload["bars"][1]["label"] == "주간 한도", payload["bars"][1]
-        assert payload["bars"][0]["pct"] == 100.0
-        assert payload["bars"][1]["pct"] == 69.0
-        assert payload["bars"][0]["sub"].endswith("2시간 후 재설정"), payload["bars"][0]["sub"]
-        assert payload["bars"][1]["sub"].endswith("19시간 후 재설정"), payload["bars"][1]["sub"]
-        assert payload["plan_type"] == "pro"
-        # The general bucket carries no model tag.
-        assert "bucket_name" not in payload, payload
-
-        # A model-specific bucket gets a compact tag on its bars, and a fresher
-        # model bucket wins over an older general one (the real-world case that
-        # used to freeze the widget on a stale general value).
-        assert bucket_tag({"limit_id": "codex"}) == ""
-        assert bucket_tag({"limit_id": "codex_bengalfox",
-                           "limit_name": "GPT-5.3-Codex-Spark"}) == "Spark"
-        spark = {"limit_id": "codex_bengalfox", "limit_name": "GPT-5.3-Codex-Spark",
-                 "primary": {"used_percent": 12.0, "window_minutes": 300,
-                             "resets_at": now + 3 * 3600},
-                 "secondary": {"used_percent": 4.0, "window_minutes": 10080,
-                               "resets_at": now + 5 * 86400}}
-        sp = make_payload(spark, now, now_epoch=now)
-        assert sp["bars"][0]["label"] == "현재 세션 · Spark", sp["bars"][0]
-        assert sp["bars"][1]["label"] == "주간 한도 · Spark", sp["bars"][1]
-        assert sp["limit_id"] == "codex_bengalfox", sp
-        assert sp["bucket_name"] == "GPT-5.3-Codex-Spark", sp
-        with open(os.path.join(day, "rollout-2026-08-31T13-00-00-def.jsonl"),
-                  "w", encoding="utf-8") as handle:
-            handle.write(json.dumps({
-                "timestamp": "2026-08-31T13:00:00Z", "type": "event_msg",
-                "payload": {"type": "token_count", "rate_limits": {
-                    "limit_id": "codex_bengalfox",
-                    "limit_name": "GPT-5.3-Codex-Spark",
-                    "primary": {"used_percent": 7.0, "window_minutes": 300}}}}) + "\n")
-        picked, _ = newest_snapshot(home)
-        assert picked.get("limit_id") == "codex_bengalfox", picked
-
-        # Window-label fallbacks for durations without a friendly name.
-        assert window_label(1440) == "일일 한도"
-        assert window_label(180) == "3시간 한도"
-        assert window_label(90) == "90분 한도"
-        # Relative reset (older schema) resolves against the event time.
-        rel = make_bar({"used_percent": 5, "window_minutes": 300,
-                        "resets_in_seconds": 3600}, now, now_epoch=now)
-        assert rel["sub"].endswith("1시간 후 재설정"), rel["sub"]
-    print("Codex local usage self-test: OK")
-
-
 def main():
     global LANG
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--sync", action="store_true")
-    group.add_argument("--self-test", action="store_true")
     parser.add_argument("--lang", choices=("ko", "en"), default="ko")
     parser.add_argument("--spark", choices=("on", "off"), default="off")
     args = parser.parse_args()
     LANG = args.lang
-
-    if args.self_test:
-        self_test()
-        return
 
     try:
         emit(sync_usage(show_spark=(args.spark == "on")))

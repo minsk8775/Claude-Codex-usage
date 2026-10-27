@@ -497,6 +497,7 @@ class Badge:
             y = rect.top + int(offset[1] * self.s)
         else:
             x = rect.right - int(RIGHT_RESERVE.get(self.key, BUTTONS) * self.s) - width
+            x = max(x, rect.left + int(8 * self.s))  # narrow window: stay on it
             y = rect.top + max(0, (int(TITLE_BAR * self.s) - height) // 2)
         self.win.geometry("+%d+%d" % (x, y))
 

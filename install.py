@@ -6,6 +6,7 @@ import os
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -25,14 +26,17 @@ STARTUP = Path(os.environ["APPDATA"]) / r"Microsoft\Windows\Start Menu\Programs\
 APP_MAIN_PORT = 47671
 APP_WATCH_PORT = 47672
 
-# Older standalone widgets to stop and unregister so only this combined app
-# starts with Windows. Ports: claude-pet main/watch and codex-usage main.
-LEGACY_CONTROL_PORTS = (47651, 47652, 47661)
-LEGACY_STARTUP_NAMES = ("Claude Usage Watcher.lnk", "Codex Usage.lnk")
-LEGACY_DESKTOP_NAMES = (
-    "Claude Usage.lnk",
-    "Claude Usage Toggle.lnk",
-    "Codex Usage.lnk",
+# Windows' own shortcut object, driven from PowerShell. Values travel in
+# environment variables so paths with quotes or non-ASCII characters (an
+# apostrophe in the user name, a OneDrive '문서' folder) need no escaping.
+SHORTCUT_SCRIPT = (
+    "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:CCU_LINK);"
+    "$s.TargetPath = $env:CCU_TARGET;"
+    "$s.Arguments = $env:CCU_ARGS;"
+    "$s.WorkingDirectory = $env:CCU_DIR;"
+    "$s.Description = $env:CCU_DESC;"
+    "$s.IconLocation = $env:CCU_ICON + ',0';"
+    "$s.Save()"
 )
 
 
@@ -42,91 +46,6 @@ def _send_exit(port):
             client.sendto(b"exit", ("127.0.0.1", port))
     except OSError:
         pass
-
-
-def remove_legacy():
-    """Stop the older standalone widgets and remove their startup and desktop
-    shortcuts, so they no longer open on boot. Leaves this app's own shortcuts
-    and everyone's saved login/settings untouched. Returns what was removed.
-    """
-    for port in LEGACY_CONTROL_PORTS:
-        _send_exit(port)
-    try:
-        desktop = desktop_path()
-    except OSError:
-        desktop = Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
-    removed = []
-    for folder, names in ((STARTUP, LEGACY_STARTUP_NAMES), (desktop, LEGACY_DESKTOP_NAMES)):
-        for name in names:
-            target = folder / name
-            try:
-                target.unlink()
-                removed.append(str(target))
-            except (FileNotFoundError, OSError):
-                pass
-    return removed
-
-
-def ensure_pywin32():
-    """Make sure pywin32 is importable.
-
-    Under ``uv run --with pywin32`` the package is already present. When the
-    installer runs on a plain Python interpreter (no uv), install it with pip
-    into that interpreter so the shortcut creation below can use it.
-    """
-
-    try:
-        import pythoncom  # noqa: F401
-        import win32com  # noqa: F401
-
-        return
-    except ImportError:
-        pass
-
-    print("pywin32 is missing; installing it...")
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "--user", "pywin32"]
-    )
-    # pywin32 puts its folders on sys.path through a .pth file, which Python
-    # only reads at startup; read it now so this same run can import it.
-    import importlib
-    import site
-
-    for folder in [site.getusersitepackages(), *site.getsitepackages()]:
-        if os.path.isdir(folder):
-            site.addsitedir(folder)
-    importlib.invalidate_caches()
-
-    try:
-        import pythoncom  # noqa: F401
-        import win32com  # noqa: F401
-    except ImportError as error:  # pragma: no cover - defensive
-        raise RuntimeError(
-            "pywin32 still could not be loaded after installing it. "
-            "Try running 'python -m pip install pywin32' yourself."
-        ) from error
-
-
-def stop_legacy_processes():
-    from win32com.client import GetObject
-
-    base_dir = str(BASE_DIR).lower()
-    legacy_names = (
-        "claudepet.ps1",
-        "watch-claude.ps1",
-        "start-pet.vbs",
-        "toggle-usage.ps1",
-        "toggle-usage.vbs",
-        "watch-claude.vbs",
-    )
-    services = GetObject("winmgmts:")
-    for process in services.ExecQuery(
-        "SELECT Name, CommandLine FROM Win32_Process "
-        "WHERE Name = 'powershell.exe' OR Name = 'wscript.exe'"
-    ):
-        command = (process.CommandLine or "").lower()
-        if base_dir in command and any(name in command for name in legacy_names):
-            process.Terminate()
 
 
 def desktop_path():
@@ -147,33 +66,31 @@ def managed_pythonw():
 
 
 def create_shortcut(path, pythonw, arguments, description):
-    import pythoncom
-    from win32com.shell import shell
-
     path.parent.mkdir(parents=True, exist_ok=True)
-    link = pythoncom.CoCreateInstance(
-        shell.CLSID_ShellLink,
-        None,
-        pythoncom.CLSCTX_INPROC_SERVER,
-        shell.IID_IShellLink,
-    )
-    link.SetPath(str(pythonw))
-    link.SetArguments(arguments)
     # Start in the data folder, not the program folder, so a running widget or
     # watcher never stops the program folder from being deleted or replaced.
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    link.SetWorkingDirectory(str(STATE_DIR))
-    link.SetDescription(description)
-    link.SetIconLocation(str(ICON), 0)
-    link.SetShowCmd(0)
-    persist = link.QueryInterface(pythoncom.IID_IPersistFile)
-    persist.Save(str(path), 0)
+    env = dict(
+        os.environ,
+        CCU_LINK=str(path),
+        CCU_TARGET=str(pythonw),
+        CCU_ARGS=arguments,
+        CCU_DIR=str(STATE_DIR),
+        CCU_DESC=description,
+        CCU_ICON=str(ICON),
+    )
+    subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", SHORTCUT_SCRIPT],
+        env=env,
+        check=True,
+        timeout=60,
+    )
 
 
 def start(pythonw, *arguments):
     subprocess.Popen(
         [str(pythonw), str(APP_SCRIPT), *arguments],
-        cwd=str(BASE_DIR),
+        cwd=str(STATE_DIR),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -183,27 +100,13 @@ def start(pythonw, *arguments):
 
 
 def main():
-    if "--cleanup-only" in sys.argv:
-        removed = remove_legacy()
-        for path in removed:
-            print("Removed legacy:", path)
-        print("Legacy cleanup complete." if removed else "No legacy shortcuts found.")
-        return
-    ensure_pywin32()
     pythonw = managed_pythonw()
-    stop_legacy_processes()
-    for path in remove_legacy():
-        print("Removed legacy:", path)
     # Stop this app's own running widget and watcher so the fresh copies below
     # run the latest code (the watcher holds its port exclusively).
     _send_exit(APP_MAIN_PORT)
     _send_exit(APP_WATCH_PORT)
-    import time as _time
-
-    _time.sleep(0.6)
-    desktop = desktop_path()
-    desktop_link = desktop / "Claude Codex Usage.lnk"
-    legacy_link = desktop / "Claude Codex Usage Toggle.lnk"
+    time.sleep(0.6)
+    desktop_link = desktop_path() / "Claude Codex Usage.lnk"
     startup_link = STARTUP / "Claude Codex Usage Watcher.lnk"
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -221,10 +124,6 @@ def main():
         '"%s" --watch' % APP_SCRIPT,
         "Start Claude Codex Usage when Claude Code opens",
     )
-    try:
-        legacy_link.unlink()
-    except FileNotFoundError:
-        pass
 
     start(pythonw, "--watch")
     start(pythonw)

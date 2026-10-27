@@ -1,10 +1,10 @@
 @echo off
 cd /d "%~dp0"
 
-rem Prefer uv when available: it prepares pywin32 in an isolated environment.
+rem Prefer uv when available; plain Python works just as well.
 where uv.exe >nul 2>nul
 if not errorlevel 1 (
-  uv run --isolated --with pywin32 python install.py
+  uv run --isolated python install.py
   if errorlevel 1 pause
   exit /b
 )

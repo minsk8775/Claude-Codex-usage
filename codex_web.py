@@ -13,7 +13,6 @@ Commands:
     codex_web.py --sync       Refresh the usage page and write codex_latest.json.
     codex_web.py --connect    Open the dedicated browser for first-time login.
     codex_web.py --close      Stop the background browser started for Codex.
-    codex_web.py --self-test  Test the DOM/limit parser offline.
 """
 
 import argparse
@@ -308,54 +307,6 @@ def emit(payload):
     print(json.dumps(payload, ensure_ascii=True))
 
 
-FIXTURE_BLOCKS = [
-    # The weekly shared limit as the page renders it (label / value / 남음 / reset).
-    ["주간 사용 한도", "35%", "남음", "2026. 9. 19. 오후 5:10 초기화"],
-    # A block that is not a usage limit (must be ignored: no reset marker).
-    ["Skills used", "100%"],
-]
-
-
-def self_test():
-    global LANG
-    LANG = usage.LANG = "ko"
-    payload = make_payload({"blocks": FIXTURE_BLOCKS})
-    assert len(payload["bars"]) == 1, payload
-    bar = payload["bars"][0]
-    assert bar["label"] == "주간 한도", bar
-    assert bar["pct"] == 65.0, bar          # 35% 남음 -> 65% 사용
-    assert bar["pct_text"] == "65%", bar
-    assert "초기화" in bar["sub"], bar
-    assert bar["stale"] is False, bar
-
-    # English "used" wording is taken as used, not converted.
-    used_block = parse_block(["Weekly limit", "42% used", "resets Sep 19"])
-    assert used_block["used"] == 42.0, used_block
-    # "left" wording is remaining -> converted.
-    left_block = parse_block(["Weekly limit", "70%", "left", "resets Sep 19"])
-    assert left_block["used"] == 30.0, left_block
-    # Shared-limit note is not mistaken for the label.
-    shared = parse_block(["Codex와 Work는 동일한 사용 한도를 공유합니다.",
-                          "주간 사용 한도", "35%", "남음", "9. 19. 초기화"])
-    assert shared["label"] == "주간 사용 한도", shared
-    merged = parse_block(["사용 한도", "13%", "남음", "주간 사용 한도6일 16시간 후 초기화됩니다"])
-    assert merged["label"] == "주간 사용 한도", merged
-    assert merged["reset"] == "6일 16시간 후 초기화", merged
-    tail = parse_block(["주간 사용 한도", "37%", "남음", "6일 5시간 후 초기화됩니다37% 남음"])
-    assert tail["reset"] == "6일 5시간 후 초기화", tail
-    assert tail["used"] == 63.0, tail
-    english = parse_block(["Weekly limit", "37%", "left", "Resets in 6 days 37% left"])
-    assert english["reset"] == "Resets in 6 days", english
-    LANG = usage.LANG = "en"
-    english = make_payload({"blocks": FIXTURE_BLOCKS})["bars"][0]
-    assert english["label"] == "Weekly limit", english
-    assert english["sub"] == "Resets Sep 19, 5:10 PM", english
-    assert normalize_label("5시간 사용 한도") == "5-hour limit"
-    LANG = usage.LANG = "ko"
-    assert normalize_label("Weekly usage limit") == "주간 한도"
-    print("Codex web usage self-test: OK")
-
-
 def main():
     global LANG
     parser = argparse.ArgumentParser()
@@ -363,15 +314,11 @@ def main():
     group.add_argument("--sync", action="store_true")
     group.add_argument("--connect", action="store_true")
     group.add_argument("--close", action="store_true")
-    group.add_argument("--self-test", action="store_true")
     parser.add_argument("--lang", choices=("ko", "en"), default="ko")
     args = parser.parse_args()
     LANG = args.lang
     usage.LANG = LANG  # shared browser helpers word their errors in this language
 
-    if args.self_test:
-        self_test()
-        return
     if args.close:
         usage.close_browser()
         return

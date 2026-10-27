@@ -172,14 +172,13 @@ ZIP으로 설치했다면 `uninstall.cmd`로 지운 뒤 새 ZIP을 받아 `insta
 없으며 다음을 모두 지웁니다.
 
 - 위젯, 시작 프로그램 감시자, 제목 표시줄 배지, 전용 브라우저
-- 바탕화면·시작 프로그램 바로가기 (옛 단독 위젯의 바로가기 포함)
+- 바탕화면·시작 프로그램 바로가기
 - 설정·캐시·로그 (`%LOCALAPPDATA%\ClaudeCodexUsage`)
 - 로그인 정보가 든 전용 브라우저 프로필 (`%LOCALAPPDATA%\ClaudePet`)
 - 프로그램 폴더 자체 (git 설치의 숨김 `.git` 포함)
 
 제거하는 동안 그 폴더를 열어 둔 cmd 창이나 탐색기 창이 있으면 폴더가 남을 수 있습니다.
-창을 닫고 폴더를 지우면 됩니다. pywin32와 uv 캐시는 다른 프로그램도 같이 쓰므로
-남겨 둡니다.
+창을 닫고 폴더를 지우면 됩니다. Python과 uv는 다른 프로그램도 같이 쓰므로 남겨 둡니다.
 
 ### 데이터 위치
 
@@ -226,19 +225,17 @@ localhost origin 제한은 클라이언트 인증이 아니므로, 같은 사용
 | `title_badges.py` | 앱 제목 표시줄 배지 (보조 프로세스) |
 | `install.py` / `install.cmd` | 설치, 바로가기 만들기 |
 | `uninstall.cmd` | 완전 제거 |
-| `cleanup-legacy.cmd` | 옛 단독 위젯(Claude 전용·Codex 전용) 중지·등록 해제 |
 | `tests/` | 오프라인 회귀 테스트 |
 
 ### 오프라인 점검
 
 ```cmd
 python -m unittest discover -s tests -v
-python codex_usage.py --self-test
-python codex_web.py --self-test
 python usage.py --self-test
 ```
 
-테스트는 가짜 기록과 목(mock)만 씁니다. 마지막 명령은 일회용 프로필로 브라우저를 띄워
+테스트는 가짜 기록과 목(mock)만 씁니다. GitHub에 올릴 때마다 Windows에서 자동으로 돕니다.
+두 번째 명령은 일회용 프로필로 브라우저를 띄워
 오프라인 DOM·프로토콜 점검을 하며, Claude 로그인은 쓰지 않습니다.
 
 ### 라이선스
@@ -406,14 +403,14 @@ Right-click → `Uninstall`, or run `uninstall.cmd` in the install folder. This
 cannot be undone. It removes:
 
 - the widget, the Startup watcher, the title-bar badges and the dedicated browsers
-- the desktop and Startup shortcuts (including the older standalone widgets' ones)
+- the desktop and Startup shortcuts
 - settings, caches and logs (`%LOCALAPPDATA%\ClaudeCodexUsage`)
 - the dedicated browser profiles holding the sign-ins (`%LOCALAPPDATA%\ClaudePet`)
 - the program folder itself (including a git install's hidden `.git`)
 
 A cmd or Explorer window left open inside the folder can keep it from being
-removed; close it and delete the folder. pywin32 and the uv cache are shared with
-other programs and are left alone.
+removed; close it and delete the folder. Python and uv are shared with other
+programs and are left alone.
 
 ### Where data lives
 
@@ -460,19 +457,17 @@ programs running as the same user can still reach DevTools. See
 | `title_badges.py` | Title-bar badges (helper process) |
 | `install.py` / `install.cmd` | Installation and shortcuts |
 | `uninstall.cmd` | Full removal |
-| `cleanup-legacy.cmd` | Stops and unregisters the older standalone widgets |
 | `tests/` | Offline regression tests |
 
 ### Offline checks
 
 ```cmd
 python -m unittest discover -s tests -v
-python codex_usage.py --self-test
-python codex_web.py --self-test
 python usage.py --self-test
 ```
 
-The tests use synthetic logs and mocks only. The last command starts a browser with
+The tests use synthetic logs and mocks only, and run on Windows on every push to
+GitHub. The second command starts a browser with
 a disposable profile for an offline DOM/protocol check; no Claude sign-in is used.
 
 ### License
