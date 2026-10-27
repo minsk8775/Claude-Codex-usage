@@ -5,7 +5,9 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-10-22
+## [0.9.0] - 2026-10-27
+
+첫 공식 릴리스입니다. 아래는 0.8.x에서 바뀐 내용입니다.
 
 ### Added
 - **표시 방식 선택 + 앱 제목 표시줄 사용량 배지**: 우클릭·알림 아이콘 메뉴의
