@@ -695,6 +695,33 @@ class WidgetTests(unittest.TestCase):
         app.root.withdraw()
         self.assertEqual([s["key"] for s in app._visible_sources()], ["codex"])
 
+    def test_codex_app_is_recognised_and_claude_code_cli_is_not(self):
+        rank = widget.app_rank
+        self.assertEqual(rank("codex", r"C:\Apps\OpenAI.Codex\app\Codex.exe"), 0)
+        self.assertEqual(rank("codex", r"C:\Apps\ChatGPT.exe"), 1)
+        self.assertEqual(rank("codex", r"C:\Apps\ChatGPT Classic.exe"), 2)
+        self.assertIsNone(rank("codex", r"C:\Apps\chrome.exe"))
+        self.assertEqual(rank("claude", r"C:\Apps\Claude\claude.exe"), 0)
+        self.assertIsNone(rank("claude", r"C:\Users\me\claude-code\claude.exe"))
+        self.assertIn(("codex", "codex"), widget.APP_KEY_BY_NAME)
+
+    def test_one_menu_drives_tray_and_widget(self):
+        def flat(items):
+            for entry in items:
+                if entry and entry[0] == "sub":
+                    yield from flat(entry[2])
+                elif entry:
+                    yield entry
+        items = list(flat(widget.menu_spec("en", "claude", True, False, "badges", "web")))
+        self.assertTrue(all(entry[1] in widget.MENU_ACTIONS for entry in items))
+        enabled = {entry[1]: entry[4] for entry in items}
+        checked = {entry[1]: entry[3] for entry in items}
+        self.assertTrue(enabled[2001] and enabled[2002])          # Claude / Codex only
+        self.assertFalse(enabled[2004])                           # arrows view
+        self.assertFalse(enabled[widget.SHOW_HIDE_ID] or enabled[widget.RESET_POS_ID])
+        self.assertTrue(checked[2001] and checked[widget.ON_TOP_ID] and checked[widget.LANG_EN_ID])
+        self.assertEqual(widget.MENU_ACTIONS[3201], ("display", "badges"))
+
     def test_widget_only_never_syncs_for_badges(self):
         app = self.app()
         app.display = "widget"
@@ -709,7 +736,7 @@ class WidgetTests(unittest.TestCase):
         app.user_moved, app.pos_x, app.bottom_anchor = True, 2500, 900
         with patch.object(widget, "monitor_work_area", return_value=(1920, 0, 3200, 1024)), \
                 patch.object(widget, "work_area", return_value=(0, 0, 1920, 1040)):
-            app._place()
+            widget.UsageApp._place(app)  # self.app() stubs _place
         app.root.geometry.assert_called_with("192x150+2500+750")
         self.assertTrue(app.user_moved)
 
@@ -720,7 +747,7 @@ class WidgetTests(unittest.TestCase):
         app.user_moved, app.pos_x, app.bottom_anchor = True, 2500, 900
         with patch.object(widget, "monitor_work_area", return_value=None), \
                 patch.object(widget, "work_area", return_value=(0, 0, 1920, 1040)):
-            app._place()
+            widget.UsageApp._place(app)  # self.app() stubs _place
         app.root.geometry.assert_called_with("192x150+1714+882")
         self.assertFalse(app.user_moved)
 
