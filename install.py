@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -29,6 +31,8 @@ APP_WATCH_PORT = 47672
 # Windows' own shortcut object, driven from PowerShell. Values travel in
 # environment variables so paths with quotes or non-ASCII characters (an
 # apostrophe in the user name, a OneDrive '문서' folder) need no escaping.
+# Its Save() cannot write to a path with characters outside the system code
+# page, so it saves into a temporary folder and Python moves the file into place.
 SHORTCUT_SCRIPT = (
     "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:CCU_LINK);"
     "$s.TargetPath = $env:CCU_TARGET;"
@@ -70,21 +74,26 @@ def create_shortcut(path, pythonw, arguments, description):
     # Start in the data folder, not the program folder, so a running widget or
     # watcher never stops the program folder from being deleted or replaced.
     STATE_DIR.mkdir(parents=True, exist_ok=True)
+    temp = Path(tempfile.mkdtemp(prefix="ccu-"))
     env = dict(
         os.environ,
-        CCU_LINK=str(path),
+        CCU_LINK=str(temp / "shortcut.lnk"),
         CCU_TARGET=str(pythonw),
         CCU_ARGS=arguments,
         CCU_DIR=str(STATE_DIR),
         CCU_DESC=description,
         CCU_ICON=str(ICON),
     )
-    subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", SHORTCUT_SCRIPT],
-        env=env,
-        check=True,
-        timeout=60,
-    )
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", SHORTCUT_SCRIPT],
+            env=env,
+            check=True,
+            timeout=60,
+        )
+        shutil.move(str(temp / "shortcut.lnk"), str(path))  # works across drives too
+    finally:
+        shutil.rmtree(temp, ignore_errors=True)
 
 
 def start(pythonw, *arguments):
