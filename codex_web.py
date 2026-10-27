@@ -15,14 +15,12 @@ Commands:
 """
 
 import argparse
+import json
 import os
-import sys
+import re
 import time
 from datetime import datetime, timezone
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
 import usage  # reuse the browser/CDP plumbing
 
 # The official Codex/Work usage analytics page (confirmed via probe).
@@ -33,27 +31,15 @@ CODEX_LATEST = os.path.join(usage.CACHE_DIR, "codex_latest.json")
 
 # Isolate the ChatGPT login/profile from Claude's dedicated browser.
 usage.USAGE_URL = CODEX_USAGE_URL
+usage.PAGE_HOSTS = ("chatgpt.com", "openai.com")
 usage.PROFILE = os.path.join(usage.APP_DATA, "CodexBrowserProfile")
 usage.STATE = os.path.join(usage.APP_DATA, "codex_browser_state.json")
 usage.READY = os.path.join(usage.APP_DATA, "codex_connected.json")
 
 LANG = "ko"
-PAGE_TIMEOUT = 20
 
 SyncError = usage.SyncError
 NeedsLogin = usage.NeedsLogin
-
-
-def codex_target(port):
-    targets = usage.http_json("http://127.0.0.1:%d/json/list" % int(port), timeout=3)
-    pages = [item for item in targets if item.get("type") == "page"]
-    for item in pages:
-        url = item.get("url", "")
-        if "chatgpt.com" in url or "openai.com" in url:
-            return item
-    if pages:
-        return pages[0]
-    return usage.open_page(port, CODEX_USAGE_URL)
 
 
 # The usage page has no ARIA meters; values are plain spans. Collect the
@@ -88,8 +74,6 @@ EXTRACT_JS = r"""
   };
 })()
 """
-
-import re
 
 _PCT_ONLY = re.compile(r"^(\d+(?:\.\d+)?)\s*%$")
 _PCT_ANY = re.compile(r"(\d+(?:\.\d+)?)\s*%")
@@ -226,15 +210,10 @@ def make_payload(data):
             "sub": sub,
         })
     if not bars:
-        raise SyncError(
-            "No Codex usage found on the page" if en
-            else "사용 한도를 페이지에서 찾지 못했습니다"
-        )
+        raise SyncError(usage.t("사용 한도를 페이지에서 찾지 못했습니다", "No Codex usage found on the page"))
     return {
         "source": "codex-web",
         "synced_at": datetime.now(timezone.utc).isoformat(),
-        "observed_at": datetime.now(timezone.utc).isoformat(),
-        "limit_id": "codex-web",
         "bars": bars,
     }
 
@@ -244,7 +223,7 @@ def read_page(devtools):
 
 
 def wait_for_usage(devtools):
-    deadline = time.time() + PAGE_TIMEOUT
+    deadline = time.time() + usage.PAGE_TIMEOUT
     last = {}
     while time.time() < deadline:
         last = read_page(devtools)
@@ -271,26 +250,7 @@ def refresh_usage(devtools):
 
 
 def sync_usage():
-    last_error = None
-    for _attempt in range(2):
-        state = usage.ensure_browser()
-        target = codex_target(state["port"])
-        websocket_url = target.get("webSocketDebuggerUrl")
-        if not websocket_url:
-            raise SyncError(usage.t("사용량 페이지에 연결하지 못했습니다", "Could not connect to the usage page"))
-        devtools = usage.DevTools(websocket_url, state["port"])
-        try:
-            payload = make_payload(refresh_usage(devtools))
-            usage.atomic_json(usage.READY, {"connected_at": payload["synced_at"]})
-            return payload
-        except NeedsLogin:
-            raise
-        except (usage.socket.timeout, SyncError, OSError) as error:
-            last_error = error
-        finally:
-            devtools.close()
-        time.sleep(1.0)
-    raise last_error
+    return usage.sync_usage(lambda devtools: make_payload(refresh_usage(devtools)))
 
 
 def connect_browser():
@@ -300,8 +260,11 @@ def connect_browser():
 
 
 def emit(payload):
-    usage.atomic_json(CODEX_LATEST, payload)
-    import json
+    """Write the result to the shared cache (the widget reads it) and echo it."""
+    try:
+        usage.atomic_json(CODEX_LATEST, payload)
+    except OSError:
+        pass
     print(json.dumps(payload, ensure_ascii=True))
 
 
@@ -324,7 +287,6 @@ def main():
         connect_browser()
         return
 
-    en = LANG == "en"
     try:
         emit(sync_usage())
     except NeedsLogin:
@@ -332,30 +294,14 @@ def main():
             os.remove(usage.READY)
         except OSError:
             pass
-        emit_error(
-            "needs_login",
-            "Codex usage needs ChatGPT sign-in\nPress ↻ to sign in"
-            if en else "Codex 사용량 연결 필요\n↻를 눌러 ChatGPT에 로그인하세요",
-        )
+        emit({"code": "needs_login", "error": usage.t(
+            "Codex 사용량 연결 필요\n↻를 눌러 ChatGPT에 로그인하세요",
+            "Codex usage needs ChatGPT sign-in\nPress ↻ to sign in")})
     except SyncError as error:
-        emit_error("sync_failed", str(error))
+        emit({"code": "sync_failed", "error": str(error)})
     except (OSError, ValueError) as error:
-        emit_error("sync_failed",
-                   "Failed to read Codex usage" if en else "Codex 사용량 읽기 실패",
-                   str(error))
-
-
-def emit_error(code, message, detail=None):
-    """Write the error to the shared cache (so the widget sees it) and echo it."""
-    import json
-    payload = {"code": code, "error": message}
-    if detail:
-        payload["detail"] = detail
-    try:
-        usage.atomic_json(CODEX_LATEST, payload)
-    except OSError:
-        pass
-    print(json.dumps(payload, ensure_ascii=True))
+        emit({"code": "sync_failed", "detail": str(error), "error": usage.t(
+            "Codex 사용량 읽기 실패", "Failed to read Codex usage")})
 
 
 if __name__ == "__main__":

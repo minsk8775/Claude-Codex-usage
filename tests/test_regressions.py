@@ -4,6 +4,7 @@ import importlib.util
 import os
 import queue
 import socket
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -47,7 +48,15 @@ class BadgeTests(unittest.TestCase):
         }
         for sub, expected in cases.items():
             self.assertEqual(badges.short_reset(sub, "ko", self.NOW), expected, sub)
-        self.assertEqual(badges.short_reset("Resets in 2 hr 12 min", "en", self.NOW), "2 hr 12 min")
+        english = {
+            "Resets in 2 hr 12 min": "in 2h 12m",
+            "Resets in 6 d 16 hr": "in 6d 16h",
+            "Resets Mon 8:00 AM": "Mon 8:00 AM",
+            "Resets Oct 24, 5:10 PM": "in 2d 2h",      # same form as a duration
+            "Resets Jan 2, 9:00 AM": "in 71d 18h",     # next year's January
+        }
+        for sub, expected in english.items():
+            self.assertEqual(badges.short_reset(sub, "en", self.NOW), expected, sub)
 
     def test_labels_are_compact_and_keep_model_tags(self):
         self.assertEqual(badges.short_label("현재 세션"), "세션")
@@ -122,13 +131,17 @@ class LanguageTests(unittest.TestCase):
             self.assertEqual(claude.t("한국어", "English"), "English")
         with patch.object(claude, "LANG", "ko"):
             self.assertEqual(claude.t("한국어", "English"), "한국어")
+            # Low-level browser errors reach the widget too (Codex shows them).
+            with self.assertRaises(claude.SyncError) as raised:
+                claude.loopback_url("http://example.com:1/", "http")
+            self.assertEqual(str(raised.exception), "브라우저 주소가 올바르지 않습니다")
 
     def test_english_badges_use_english_reset_text(self):
         data = {"bars": [{"label": "Current session", "pct": 5, "sub": "Resets in 2 hr 12 min"},
                          {"label": "All models", "pct": 55, "sub": "Resets Mon 8:00 AM"}]}
         cols = badges.columns(data, "en", BadgeTests.NOW)
         self.assertEqual([(c["label"], c["reset"]) for c in cols],
-                         [("Session", "2 hr 12 min"), ("Weekly", "Mon 8:00 AM")])
+                         [("Session", "in 2h 12m"), ("Weekly", "Mon 8:00 AM")])
 
 
 WEB_FIXTURE_BLOCKS = [
@@ -140,6 +153,15 @@ WEB_FIXTURE_BLOCKS = [
 
 
 class CodexWebTests(unittest.TestCase):
+    def test_codex_reuses_the_shared_sync_with_its_own_page(self):
+        self.assertEqual(web.usage.PAGE_HOSTS, ("chatgpt.com", "openai.com"))
+        with patch.object(web.usage, "sync_usage", return_value={"bars": []}) as shared:
+            web.sync_usage()
+        reader = shared.call_args.args[0]
+        devtools = Mock()
+        with patch.object(web, "refresh_usage", return_value={"blocks": WEB_FIXTURE_BLOCKS}):
+            self.assertEqual(reader(devtools)["bars"][0]["pct"], 65.0)
+
     def test_web_reader_parses_page_blocks(self):
         self.addCleanup(setattr, web, "LANG", web.LANG)
         self.addCleanup(setattr, web.usage, "LANG", web.usage.LANG)
@@ -463,6 +485,23 @@ class WidgetTests(unittest.TestCase):
         app._known_app_keys = {"claude", "codex"}
         app.root.withdraw()
         self.assertEqual([s["key"] for s in app._visible_sources()], ["codex"])
+
+    def test_installer_creates_a_working_shortcut(self):
+        installer = load("tested_install", "install.py")
+        with tempfile.TemporaryDirectory(prefix="ccu shortcut '문서' ") as temp:
+            link = Path(temp) / "Claude Codex Usage.lnk"
+            with patch.object(installer, "STATE_DIR", Path(temp) / "state"):
+                installer.create_shortcut(link, Path(sys.executable), '"%s" --watch' % installer.APP_SCRIPT, "test")
+            self.assertTrue(link.exists())
+            read = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK);"
+                 "$s.TargetPath; $s.Arguments; $s.WorkingDirectory"],
+                env=dict(os.environ, LNK=str(link)), capture_output=True, text=True, check=True,
+            ).stdout.splitlines()
+            self.assertEqual(Path(read[0]).resolve(), Path(sys.executable).resolve())
+            self.assertTrue(read[1].endswith("--watch"))
+            self.assertEqual(Path(read[2]), Path(temp) / "state")
 
     def test_codex_app_is_recognised_and_claude_code_cli_is_not(self):
         rank = widget.app_rank

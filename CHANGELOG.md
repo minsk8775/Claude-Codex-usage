@@ -14,12 +14,20 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   앱으로 가지 않을 수 있었습니다. 이제 `Codex.exe`도 인식하고, 둘 다 켜져 있으면 Codex
   앱 → ChatGPT → ChatGPT Classic 순으로 고릅니다.
 - **좁은 창에서 Claude 배지가 창 왼쪽 밖으로 밀려나던 문제**: 배지가 창 안에 머뭅니다.
+- **한국어 모드에서 일부 오류가 영어로 나오던 문제**: 브라우저 연결 단계의 오류 7개가
+  영어로만 적혀 있어, Codex 쪽에서는 그대로 위젯에 보였습니다. 이제 고른 언어로 나옵니다.
+- **영어 배지의 초기화 시간 형식이 제각각이던 문제**: `in 2h 12m`처럼 한 형식으로 맞추고,
+  `Resets Oct 24, 5:10 PM` 같은 날짜도 한국어처럼 남은 시간(`in 2d 2h`)으로 바꿉니다.
 
 ### Changed
 - **설치에 pywin32가 필요 없습니다.** 바로가기를 Windows 기본 기능(PowerShell의
   `WScript.Shell`)으로 만들어, 이제 앱 전체가 Python 표준 라이브러리만 씁니다. pywin32
   설치 단계와 그 오류가 사라졌습니다.
 - 알림 아이콘 메뉴와 위젯 우클릭 메뉴를 메뉴 정의 하나로 만듭니다(겉모습·동작은 같음).
+- Codex 리더가 Claude 리더의 동기화 흐름을 그대로 복사해 두던 것을 공유하도록 정리하고,
+  자동 업데이트 시절의 재시작 처리·아무도 보내지 않는 제어 명령·Windows가 아닌 환경용 분기
+  같은 쓰이지 않는 코드를 지웠습니다(동작은 같음).
+- 설치 프로그램이 실제로 바로가기를 만드는지 Windows 자동 테스트로 확인합니다.
 - Codex 리더의 `--self-test`를 정규 테스트(`tests/`)로 옮겼고, GitHub에 올릴 때마다
   Windows에서 테스트가 자동으로 돕니다.
 

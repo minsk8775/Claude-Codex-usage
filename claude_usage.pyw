@@ -40,7 +40,6 @@ ERROR_LOG = STATE_DIR / "error.log"
 BROWSER_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "ClaudePet"
 AUTO_FILE = STATE_DIR / "auto.enabled"
 SETTINGS_FILE = STATE_DIR / "settings.json"
-PYTHONW_FILE = STATE_DIR / "pythonw.path"
 DESKTOP = Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
 try:
     import winreg
@@ -59,8 +58,9 @@ MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
 UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_web.py", "title_badges.py", "install.py", "install.cmd")
-# "autoshow" is the watcher noticing an app launch; "show" is the user asking.
-CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "hide", "toggle", "exit")}
+# What other processes may ask over UDP: "show" (desktop shortcut, a badge),
+# "autoshow" (the watcher noticing an app launch) and "exit" (uninstall).
+CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "exit")}
 
 # The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
 # a protected WindowsApps folder, so they cannot be launched by their exe path.
@@ -91,6 +91,7 @@ SOURCES = (
     },
 )
 SOURCE_BY_KEY = {source["key"]: source for source in SOURCES}
+READER_SCRIPTS = tuple(source["script"] for source in SOURCES)
 
 
 def bar_cap(key):
@@ -107,7 +108,7 @@ def bar_cap(key):
 #   codex        - Codex only
 VIEW_MODES = ("auto", "both_stacked", "both_paged", "claude", "codex")
 DEFAULT_MODE = "auto"
-# (menu id, mode key, string key) rendered in the tray menu, in this order.
+# (menu id, mode key, string key), in right-click menu order.
 MODE_MENU = (
     (2000, "auto", "mode_auto"),
     (2001, "claude", "mode_claude"),
@@ -115,7 +116,6 @@ MODE_MENU = (
     (2003, "both_stacked", "mode_both_stacked"),
     (2004, "both_paged", "mode_both_paged"),
 )
-MODE_BY_ID = {menu_id: mode for menu_id, mode, _key in MODE_MENU}
 LANG_KO_ID = 3000
 LANG_EN_ID = 3001
 UNINSTALL_ID = 1005
@@ -131,7 +131,6 @@ DISPLAY_MENU = (
     (3201, "badges", "display_badges"),
     (3202, "both", "display_both"),
 )
-DISPLAY_BY_ID = {menu_id: mode for menu_id, mode, _key in DISPLAY_MENU}
 
 # UI language. The widget chrome, the update badge and the two reader scripts
 # (via a --lang flag) all follow this. Default Korean; switch in the right-click
@@ -475,7 +474,6 @@ class TrayIcon:
     MF_BYCOMMAND = 0x0000
     MF_CHECKED = 0x0008
     MF_GRAYED = 0x0001
-    MF_UNCHECKED = 0x0000
     TPM_RIGHTBUTTON = 0x0002
     TPM_RETURNCMD = 0x0100
     HWND_MESSAGE = -3
@@ -708,32 +706,9 @@ class TrayIcon:
 
 
 def rounded_rectangle(canvas, x1, y1, x2, y2, radius, **options):
-    points = [
-        x1 + radius,
-        y1,
-        x2 - radius,
-        y1,
-        x2,
-        y1,
-        x2,
-        y1 + radius,
-        x2,
-        y2 - radius,
-        x2,
-        y2,
-        x2 - radius,
-        y2,
-        x1 + radius,
-        y2,
-        x1,
-        y2,
-        x1,
-        y2 - radius,
-        x1,
-        y1 + radius,
-        x1,
-        y1,
-    ]
+    points = [x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
+              x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
+              x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1]
     return canvas.create_polygon(points, smooth=True, splinesteps=24, **options)
 
 
@@ -1018,7 +993,6 @@ class UsageApp:
         self.resize_pointer = 0
         self.resize_width = self.BASE_WIDTH
         self.exiting = False
-        self.restart_pending = False
         self.width = self.BASE_WIDTH
         self.height = self.ERROR_HEIGHT
         self.hit_sync = (0, 0, 0, 0)
@@ -1131,8 +1105,6 @@ class UsageApp:
                 pass
             self.tray.stop()
             self._stop_badges()
-            if self.restart_pending:
-                start_main()
 
     def _listen(self):
         self.control_socket.settimeout(0.5)
@@ -1164,15 +1136,10 @@ class UsageApp:
                 # An app just launched; in badges-only mode the badge is enough.
                 if self.display != "badges":
                     self.show()
-            elif action == "hide":
-                self.hide()
             elif action == "toggle":
                 self.toggle()
             elif action == "exit":
                 self.exit()
-                return
-            elif action == "restart":
-                self.restart()
                 return
             elif action == "update_found":
                 self.update_available = True
@@ -1298,14 +1265,6 @@ class UsageApp:
             return "codex"
         return "both_stacked"
 
-    def _desired_auto_view(self):
-        """Auto view based on which desktop apps are running."""
-        try:
-            keys = running_app_keys()
-        except Exception:
-            keys = set()
-        return self._auto_view_for(keys)
-
     def _visible_sources(self):
         """Sources to sync: what the widget shows (when it is on screen), plus
         every running app that carries a title-bar badge."""
@@ -1328,7 +1287,10 @@ class UsageApp:
         self.mode = mode
         self.tray.current_mode = mode
         if mode == "auto":
-            self.auto_view = self._desired_auto_view()
+            try:
+                self.auto_view = self._auto_view_for(running_app_keys())
+            except Exception:
+                self.auto_view = self._auto_view_for(set())
         if not self._stacked():
             self.data = self.datas.get(self._source()["key"]) or {
                 "error": self._t("syncing")
@@ -1413,8 +1375,8 @@ class UsageApp:
 
     def _uninstall(self):
         """Confirm, then launch the uninstaller and quit. The uninstaller stops
-        the watcher, closes the dedicated browsers, and removes shortcuts,
-        settings and login state; the program folder itself is left in place."""
+        the watcher, closes the dedicated browsers, and removes the shortcuts,
+        settings, login state and the program folder itself."""
         try:
             confirmed = messagebox.askyesno(
                 self._t("uninstall_confirm_title"), self._t("uninstall_confirm")
@@ -1470,8 +1432,7 @@ class UsageApp:
         if action == "restart":
             self.events.put(("recover_done", None))
 
-    def _load_latest(self, source=None):
-        source = source or self._source()
+    def _load_latest(self, source):
         try:
             data = json.loads(Path(source["latest"]).read_text(encoding="utf-8"))
             if isinstance(data, dict):
@@ -1599,8 +1560,6 @@ class UsageApp:
             )
 
     def _draw_nav(self):
-        if len(SOURCES) < 2:
-            return
         for box, glyph in ((self.hit_prev, "‹"), (self.hit_next, "›")):
             x1, y1, x2, y2 = box
             self.canvas.create_text(
@@ -1806,10 +1765,7 @@ class UsageApp:
         )
 
     def _change_page(self, delta):
-        count = len(SOURCES)
-        if count < 2:
-            return
-        new_page = (self.page + delta) % count
+        new_page = (self.page + delta) % len(SOURCES)
         if new_page == self.page:
             return
         self.page = new_page
@@ -2041,14 +1997,6 @@ class UsageApp:
         else:
             self.hide()
 
-    def restart(self):
-        """Reload the widget after an update, staying armed for Claude Code."""
-        if self.exiting:
-            return
-        self.exiting = True
-        self.restart_pending = True
-        self.root.destroy()
-
     def exit(self):
         if self.exiting:
             return
@@ -2061,7 +2009,7 @@ class UsageApp:
             log_error(repr(error))
         # Close both dedicated reader browsers (Claude and Codex); a browser left
         # running keeps holding its profile and would block a later reinstall.
-        for script in (USAGE_SCRIPT, CODEX_WEB_SCRIPT):
+        for script in READER_SCRIPTS:
             try:
                 run_script(script, "--close", timeout=20)
             except Exception as error:
@@ -2114,9 +2062,10 @@ def running_app_keys():
     return keys
 
 
-def start_main(auto=False):
+def start_main():
+    """Start the widget for an app that just launched (the watcher's job)."""
     subprocess.Popen(
-        [sys.executable, str(Path(__file__).resolve())] + (["--auto"] if auto else []),
+        [sys.executable, str(Path(__file__).resolve()), "--auto"],
         cwd=neutral_dir(),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -2145,7 +2094,7 @@ def run_watcher():
         while True:
             current = running_app_keys()
             if (current - known) and AUTO_FILE.exists():
-                start_main(auto=True)
+                start_main()
             known = current
             try:
                 message, _ = control.recvfrom(65)
@@ -2162,7 +2111,7 @@ def run_watcher():
 
 
 def schedule_self_delete(*targets):
-    """Delete the program folder itself once this process exits.
+    """Delete these folders (the program folder among them) once this process exits.
 
     A running process holds its own folder open, so hand the delete to a
     detached Python process that waits for the lock to clear and retries. We use
@@ -2270,7 +2219,7 @@ def uninstall():
     wait_for_exit((MAIN_PORT, WATCH_PORT), timeout=45)
     # Stop the dedicated reader browsers so their profiles can be deleted and no
     # orphan Chrome is left running.
-    for script in (USAGE_SCRIPT, CODEX_WEB_SCRIPT):
+    for script in READER_SCRIPTS:
         try:
             run_script(script, "--close", timeout=20)
         except Exception as error:

@@ -24,7 +24,7 @@ import re
 import socket
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
@@ -133,6 +133,12 @@ def remaining_text(seconds, lang="ko"):
 _GENERIC = re.compile(r"^\s*((사용\s*)?한도|usage\s*limit|limit)?\s*$", re.IGNORECASE)
 _KO_REL = re.compile(r"((?:\d+\s*(?:일|시간|분)\s*)+)후")
 _KO_CLOCK = re.compile(r"(\(([월화수목금토일])(?:요일)?\)\s*)?(오전|오후)\s*(\d{1,2}:\d{2})")
+_EN_REL = re.compile(r"\bin\s+((?:\d+\s*[a-z]+\s*)+)", re.IGNORECASE)
+_EN_UNIT = {"d": 86400, "h": 3600, "m": 60}
+_EN_DATE = re.compile(
+    r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+"
+    r"(\d{1,2}):(\d{2})\s*([AP]M)", re.IGNORECASE)
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 _KO_DATE = re.compile(
     r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})")
 
@@ -140,8 +146,10 @@ _KO_DATE = re.compile(
 def short_reset(sub, lang="ko", now=None):
     """Compact reset text for the badge's bottom line.
 
-    Accepts the readers' sub-lines: '2시간 12분 후 재설정', '(월) 오전 8:00에 재설정',
-    and the Codex page's '2026. 9. 19. 오후 5:10 초기화' (turned into time left).
+    Accepts the readers' sub-lines in either language: '2시간 12분 후 재설정' /
+    'Resets in 2 hr 12 min', '(월) 오전 8:00에 재설정' / 'Resets Mon 8:00 AM', and
+    dates such as '2026. 9. 19. 오후 5:10 초기화' / 'Resets Sep 19, 5:10 PM', which
+    are turned into time left ('2일 2시간 후 초기화' / 'in 2d 2h').
     A multi-line sub-line uses its last line.
     """
     lines = [line.strip() for line in str(sub or "").splitlines() if line.strip()]
@@ -163,6 +171,25 @@ def short_reset(sub, lang="ko", now=None):
         if target is not None:
             now = now or datetime.now()
             return remaining_text((target - now).total_seconds(), lang)
+    match = _EN_DATE.search(line)
+    if match:
+        month, day, hour, minute, meridiem = match.groups()
+        hour = int(hour) % 12 + (12 if meridiem.upper() == "PM" else 0)
+        now = now or datetime.now()
+        try:
+            target = datetime(now.year, _MONTHS.index(month[:3].lower()) + 1, int(day), hour, int(minute))
+            if target < now - timedelta(days=1):  # "Jan 2" seen in late December
+                target = target.replace(year=now.year + 1)
+        except ValueError:
+            target = None
+        if target is not None:
+            return remaining_text((target - now).total_seconds(), lang)
+    match = _EN_REL.search(line)
+    if match:
+        seconds = sum(int(number) * _EN_UNIT.get(unit[0].lower(), 0)
+                      for number, unit in re.findall(r"(\d+)\s*([a-z]+)", match.group(1), re.IGNORECASE))
+        if seconds:
+            return remaining_text(seconds, lang)
     # Pick out just the time part; page lines can carry extra words around it.
     match = _KO_REL.search(line)
     if match:
@@ -404,7 +431,7 @@ class Badge:
         s = self.s
         canvas = self.canvas
         canvas.delete("all")
-        label_font, pct_font, small_font = self.font(10.5, "bold"), self.font(10.5, "bold"), self.font(9)
+        label_font, small_font = self.font(10.5, "bold"), self.font(9)
         big = tkfont.Font(root=self.app.root, font=label_font)
         small = tkfont.Font(root=self.app.root, font=small_font)
         measure_label, measure_small = big.measure, small.measure
@@ -441,7 +468,7 @@ class Badge:
             y1 = y_label
             canvas.create_text(x, y1, text=col["label"], anchor="nw", fill=DIM, font=label_font)
             canvas.create_text(x + col_width, y1, text=col["pct_text"], anchor="ne",
-                               fill=color, font=pct_font)
+                               fill=color, font=label_font)
             bar_bottom = bar_top + bar_h
             canvas.create_rectangle(x, bar_top, x + col_width, bar_bottom, fill=TRACK, outline="")
             fill_to = x + int(col_width * col["pct"] / 100.0)

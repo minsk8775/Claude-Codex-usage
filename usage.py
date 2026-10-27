@@ -1,6 +1,6 @@
 """Read exact Claude plan usage from the official Settings > Usage page.
 
-Claude does not publish a subscription-usage API. ClaudePet therefore opens
+Claude does not publish a subscription-usage API. This reader therefore opens
 the real Usage page in a dedicated Chrome/Edge profile and reads the two meters
 that Anthropic renders there. The browser owns the login session; this script
 never reads cookies, tokens, or credential files.
@@ -8,7 +8,7 @@ never reads cookies, tokens, or credential files.
 Commands:
     usage.py --sync       Refresh the official page and write latest.json.
     usage.py --connect    Open the dedicated browser for first-time login.
-    usage.py --close      Stop a background browser started by Claude Usage.
+    usage.py --close      Stop the background browser this reader started.
     usage.py --self-test  Test the browser protocol and DOM parser offline.
 """
 
@@ -33,6 +33,8 @@ from datetime import datetime, timezone
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 USAGE_URL = "https://claude.ai/settings/usage"
+# Hosts whose open tab is reused as the usage page (codex_web.py overrides these).
+PAGE_HOSTS = ("claude.ai",)
 
 # UI language for the labels and status text this script emits ("ko" or "en"),
 # set from --lang. Claude's own reset text is scraped from the page and follows
@@ -264,9 +266,8 @@ def atomic_json(path, payload):
     os.replace(temp, path)
 
 
-def emit(payload, write_latest=True):
-    if write_latest:
-        atomic_json(LATEST, payload)
+def emit(payload):
+    atomic_json(LATEST, payload)
     # stdout may be CP949 on Korean Windows. The widget reads latest.json, so
     # keep stdout ASCII-safe instead of risking a UnicodeEncodeError.
     print(json.dumps(payload, ensure_ascii=True))
@@ -282,7 +283,7 @@ def browser_candidates():
         os.path.join("Google", "Chrome", "Application", "chrome.exe"),
         os.path.join("Microsoft", "Edge", "Application", "msedge.exe"),
     ]
-    for name in ("chrome.exe", "msedge.exe", "chrome", "microsoft-edge"):
+    for name in ("chrome.exe", "msedge.exe"):
         found = shutil.which(name)
         if found:
             yield found
@@ -337,7 +338,7 @@ def loopback_url(url, scheme):
         host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
         return parsed._replace(netloc="%s:%d" % (host, parsed.port))
     except (TypeError, ValueError) as error:
-        raise SyncError("Invalid local browser endpoint") from error
+        raise SyncError(t("브라우저 주소가 올바르지 않습니다", "Invalid local browser endpoint")) from error
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -351,7 +352,7 @@ def http_json(url, method="GET", timeout=2):
     with opener.open(request, timeout=timeout) as response:
         data = response.read(MAX_MESSAGE_BYTES + 1)
         if len(data) > MAX_MESSAGE_BYTES:
-            raise SyncError("Browser response is too large")
+            raise SyncError(t("브라우저 응답이 너무 큽니다", "Browser response is too large"))
         return json.loads(data.decode("utf-8"))
 
 
@@ -442,16 +443,6 @@ def hide_browser_windows(pid):
         pass
 
 
-def hidden_startupinfo():
-    """Ask Windows not to show the browser's first GUI window."""
-    if os.name != "nt":
-        return None
-    startup = subprocess.STARTUPINFO()
-    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startup.wShowWindow = subprocess.SW_HIDE
-    return startup
-
-
 def wait_for_debug(port, process=None, hidden_pid=None):
     deadline = time.time() + CONNECT_TIMEOUT
     while time.time() < deadline:
@@ -506,22 +497,17 @@ def launch_browser(visible):
     os.makedirs(PROFILE, exist_ok=True)
     browser = find_browser()
     port = free_port()
-    creationflags = 0
-    if not visible and os.name == "nt":
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     arguments = [browser] + browser_flags(port, PROFILE, visible)
-    if not visible and os.name == "nt":
-        process = launch_on_hidden_desktop(arguments)
-    else:
+    if visible:
         process = subprocess.Popen(
             arguments,
             cwd=APP_DATA,  # never pin the program folder (see launch_on_hidden_desktop)
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=creationflags,
-            startupinfo=hidden_startupinfo() if not visible else None,
         )
+    else:
+        process = launch_on_hidden_desktop(arguments)
     state = {
         "pid": process.pid,
         "port": port,
@@ -529,15 +515,14 @@ def launch_browser(visible):
         "browser": browser,
         "profile": PROFILE,
     }
-    if os.name == "nt":
-        api = windows_process_api()
-        handle = api.OpenProcess(0x1000, False, process.pid)
-        if not handle:
-            raise SyncError("Cannot record browser process identity")
-        try:
-            _path, state["process_created"] = process_identity(api, handle)
-        finally:
-            api.CloseHandle(handle)
+    api = windows_process_api()
+    handle = api.OpenProcess(0x1000, False, process.pid)
+    if not handle:
+        raise SyncError(t("브라우저 프로세스를 확인하지 못했습니다", "Cannot record browser process identity"))
+    try:
+        _path, state["process_created"] = process_identity(api, handle)
+    finally:
+        api.CloseHandle(handle)
     save_state(state)
     if not visible:
         hide_browser_windows(process.pid)
@@ -563,7 +548,7 @@ def connect_browser():
             open_page(state["port"], USAGE_URL)
             return state
         if not stop_owned_browser(state):
-            raise SyncError("Close the old dedicated usage browser before signing in again")
+            raise SyncError(t("다시 로그인하기 전에 이전 전용 브라우저를 닫아 주세요", "Close the old dedicated usage browser before signing in again"))
         time.sleep(0.8)
     return launch_browser(visible=True)
 
@@ -581,7 +566,7 @@ def page_target(port):
     targets = http_json("http://127.0.0.1:%d/json/list" % int(port), timeout=3)
     pages = [item for item in targets if item.get("type") == "page"]
     for item in pages:
-        if "claude.ai" in item.get("url", ""):
+        if any(host in item.get("url", "") for host in PAGE_HOSTS):
             return item
     if pages:
         return pages[0]
@@ -679,9 +664,9 @@ class WebSocket:
             elif length == 127:
                 length = struct.unpack("!Q", self._read_exact(8))[0]
             if length > MAX_MESSAGE_BYTES or message_size + length > MAX_MESSAGE_BYTES:
-                raise SyncError("Browser message is too large")
+                raise SyncError(t("브라우저 메시지가 너무 큽니다", "Browser message is too large"))
             if opcode >= 0x8 and (not final or length > 125):
-                raise SyncError("Invalid browser control frame")
+                raise SyncError(t("브라우저 응답 형식이 올바르지 않습니다", "Invalid browser control frame"))
             mask = self._read_exact(4) if masked else None
             payload = self._read_exact(length)
             if mask:
@@ -725,7 +710,7 @@ class WebSocket:
 class DevTools:
     def __init__(self, websocket_url, port=None):
         if port is not None and loopback_url(websocket_url, "ws").port != port:
-            raise SyncError("Browser endpoint changed ports")
+            raise SyncError(t("브라우저 포트가 바뀌었습니다", "Browser endpoint changed ports"))
         self.websocket = WebSocket(websocket_url)
         self.request_id = 0
 
@@ -947,10 +932,18 @@ def make_payload(data):
     }
 
 
-def sync_usage():
-    # Try twice: a cold first load (browser just launched, Cloudflare check) can
-    # time out, and the second attempt reuses the now-warm browser and its
-    # already-loaded page, so it usually succeeds. NeedsLogin is not retried.
+def read_usage(devtools):
+    return make_payload(refresh_usage(devtools))
+
+
+def sync_usage(read=read_usage):
+    """Read the usage page through the dedicated browser; ``read`` turns the
+    connected page into a payload (codex_web.py passes its own).
+
+    Try twice: a cold first load (browser just launched, Cloudflare check) can
+    time out, and the second attempt reuses the now-warm browser and its
+    already-loaded page, so it usually succeeds. NeedsLogin is not retried.
+    """
     last_error = None
     for attempt in range(2):
         state = ensure_browser()
@@ -960,7 +953,7 @@ def sync_usage():
             raise SyncError(t("사용량 페이지에 연결하지 못했습니다", "Could not connect to the usage page"))
         devtools = DevTools(websocket_url, state["port"])
         try:
-            payload = make_payload(refresh_usage(devtools))
+            payload = read(devtools)
             atomic_json(READY, {"connected_at": payload["synced_at"]})
             return payload
         except NeedsLogin:
@@ -988,15 +981,7 @@ def self_test():
     ) as profile:
         port = free_port()
         arguments = [browser] + browser_flags(port, profile, visible=False)
-        if os.name == "nt":
-            process = launch_on_hidden_desktop(arguments)
-        else:
-            process = subprocess.Popen(
-                arguments,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+        process = launch_on_hidden_desktop(arguments)
         try:
             hide_browser_windows(process.pid)
             wait_for_debug(port, process, hidden_pid=process.pid)
@@ -1045,7 +1030,7 @@ def self_test():
                     process.kill()
                 except OSError:
                     pass
-    print("Claude Usage browser sync self-test: OK")
+    print("Claude usage reader self-test: OK")
 
 
 def main():
@@ -1063,11 +1048,6 @@ def main():
 
     if args.connect:
         connect_browser()
-        emit(
-            {"message": "Sign in to Claude, then press the refresh button again"
-             if en else "Claude 로그인 후 펫의 새로고침 버튼을 다시 누르세요"},
-            write_latest=False,
-        )
         return
     if args.close:
         close_browser()
