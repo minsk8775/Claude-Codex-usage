@@ -44,8 +44,6 @@ Codex app title bars**. It never calls a model, so checking usage costs no quota
 - Chrome 또는 Edge
 - Python 3 또는 [uv](https://docs.astral.sh/uv/) (둘 중 하나)
 - Git (선택): 있으면 `git pull`로 업데이트하고, 새 버전이 나오면 위젯에 알림이 뜹니다.
-- [Codex CLI](https://github.com/openai/codex) (선택): Codex 데이터 소스를
-  `로컬 CLI 기록`으로 쓸 때만 필요합니다.
 
 ### 설치
 
@@ -123,8 +121,6 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 | 앱 열기 | 위젯의 Claude 부분 더블클릭 → Claude 앱, Codex 부분 → ChatGPT 앱. 앱이 없으면 웹사이트가 열립니다. |
 | 숨기기 / 표시 | `×`, 또는 알림 아이콘 왼쪽 클릭 |
 | 항상 위 | 우클릭 → `항상 위` |
-| Codex 데이터 소스 | 우클릭 → `Codex 데이터 소스` → `공식 페이지 (브라우저)` / `로컬 CLI 기록` |
-| Codex Spark 표시 | 우클릭 → `Codex Spark 사용량도 표시` (기본 꺼짐) |
 | 동기화 문제 해결 | 우클릭 → `동기화 문제 해결` → `다시 시도` / `리더 브라우저 재시작` / `다시 로그인 (브라우저 창)` |
 | 언어 | 우클릭 → `언어 (Language)` → `한국어` / `영어 (English)` |
 | 종료 | 알림 아이콘 우클릭 → `종료` |
@@ -136,17 +132,9 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 
 - **Claude** (`usage.py`): 전용 Chrome/Edge 프로필로 Claude 공식 `설정 → 사용량`
   페이지를 열고, 화면에 그려진 값만 읽습니다.
-- **Codex: 공식 페이지 (기본)** (`codex_web.py`): 같은 방식으로 ChatGPT 공식 사용량
-  페이지를 읽습니다. ChatGPT 앱·웹·Work 사용량까지 포함된 실제 한도입니다. 페이지는
+- **Codex** (`codex_web.py`): 같은 방식으로 ChatGPT 공식 사용량 페이지를 읽습니다.
+  Codex 앱·ChatGPT 앱·웹·CLI 사용량까지 모두 포함된 실제 한도입니다. 페이지는
   `남음`으로 보여 주지만, 위젯은 Claude와 맞추려고 **사용한 양**으로 바꿔 보여 줍니다.
-- **Codex: 로컬 CLI 기록** (`codex_usage.py`): 로그인 없이 Codex CLI가
-  `~/.codex/sessions`에 남긴 기록만 읽습니다. CLI 사용분만 보입니다.
-  - 기본으로는 일반 Codex 한도(현재 세션 + 주간)만 보여 줍니다. `Codex Spark 사용량도
-    표시`를 켜면 모델별 한도(예: GPT-5.3-Codex-Spark)도 함께 보이고, 라벨에 `· Spark`
-    처럼 태그가 붙습니다.
-  - 일반 한도가 오래됐고 모델별 한도만 쓰는 중이면, 토글이 꺼져 있어도 그 한도를
-    보여 줘서 위젯이 낡은 값에 멈추지 않습니다.
-  - 5분이 지났거나 초기화 시각을 넘긴 기록은 회색과 `오래된 기록`으로 표시합니다.
 
 전용 브라우저는 화면에 보이지 않게 뒤에서 돌고, 위젯을 끌 때 함께 닫힙니다.
 
@@ -210,7 +198,7 @@ localhost origin 제한은 클라이언트 인증이 아니므로, 같은 사용
 | --- | --- |
 | `공식 사용량 동기화 실패` (timed out) | 우클릭 → `동기화 문제 해결` → `리더 브라우저 재시작` |
 | `로그인 필요` / `연결 필요` | `↻`를 누르거나 `동기화 문제 해결` → `다시 로그인 (브라우저 창)` |
-| Codex 값이 ChatGPT 앱과 다름 | `Codex 데이터 소스`가 `공식 페이지 (브라우저)`인지 확인 |
+| Codex 값이 ChatGPT 앱과 다름 | `↻`로 다시 동기화하거나 `동기화 문제 해결` → `리더 브라우저 재시작` |
 | 폴더가 안 지워짐 | 위젯을 종료하고 그 폴더를 연 cmd·탐색기 창을 닫은 뒤 다시 시도 |
 | 그 밖의 오류 | `%LOCALAPPDATA%\ClaudeCodexUsage\error.log` 확인 |
 
@@ -220,8 +208,7 @@ localhost origin 제한은 클라이언트 인증이 아니므로, 같은 사용
 | --- | --- |
 | `claude_usage.pyw` | 위젯 UI, 알림 아이콘, 표시 방식·보기 모드, 제거 |
 | `usage.py` | Claude 공식 사용량 페이지 읽기 (브라우저) |
-| `codex_web.py` | ChatGPT 공식 사용량 페이지 읽기 (브라우저, Codex 기본) |
-| `codex_usage.py` | 로컬 `~/.codex` 기록 읽기 (Codex `로컬 CLI 기록` 모드) |
+| `codex_web.py` | ChatGPT 공식 사용량 페이지 읽기 (브라우저) |
 | `title_badges.py` | 앱 제목 표시줄 배지 (보조 프로세스) |
 | `install.py` / `install.cmd` | 설치, 바로가기 만들기 |
 | `uninstall.cmd` | 완전 제거 |
@@ -267,8 +254,6 @@ MIT
 - Chrome or Edge
 - Python 3 or [uv](https://docs.astral.sh/uv/) (either one)
 - Git (optional): update with `git pull` and get notified of new versions.
-- [Codex CLI](https://github.com/openai/codex) (optional): only needed for the
-  `Local CLI log` Codex data source.
 
 ### Installation
 
@@ -351,8 +336,6 @@ opening a watched app brings it back.
 | Open the app | Double-click the Claude part → Claude app; the Codex part → ChatGPT app. The website opens if the app is not installed. |
 | Hide / show | `×`, or left-click the notification icon |
 | Always on top | Right-click → `Always on top` |
-| Codex data source | Right-click → `Codex data source` → `Official page (browser)` / `Local CLI log` |
-| Codex Spark usage | Right-click → `Also show Codex Spark usage` (off by default) |
 | Fix sync issues | Right-click → `Fix sync issues` → `Retry now` / `Restart reader browser` / `Re-sign in (browser)` |
 | Language | Right-click → `Language` → `한국어 (Korean)` / `English` |
 | Exit | Right-click the notification icon → `Exit` |
@@ -364,20 +347,10 @@ The current version is shown in small type under `USAGE` in the header.
 
 - **Claude** (`usage.py`) opens Claude's official `Settings → Usage` page in a
   dedicated Chrome/Edge profile and reads only the values rendered on the page.
-- **Codex, official page (default)** (`codex_web.py`) reads the official ChatGPT
-  usage page the same way, so usage from the ChatGPT app, web and Work is
-  included. The page reports what is *left*; the widget converts it to *used* to
-  match Claude.
-- **Codex, local CLI log** (`codex_usage.py`) reads only what the Codex CLI wrote
-  under `~/.codex/sessions`, with no sign-in. It sees CLI usage only.
-  - By default only the general Codex limit (current session + weekly) is shown.
-    Turn on `Also show Codex Spark usage` to add model-specific limits (e.g.
-    GPT-5.3-Codex-Spark), tagged like `· Spark`.
-  - If the general limit is stale because only a model limit is in use, that model
-    limit is shown even with the toggle off, so the widget never freezes on an old
-    value.
-  - Records older than five minutes or past their reset time are greyed out and
-    marked stale.
+- **Codex** (`codex_web.py`) reads the official ChatGPT usage page the same way,
+  so usage from the Codex and ChatGPT apps, the web and the CLI is all included.
+  The page reports what is *left*; the widget converts it to *used* to match
+  Claude.
 
 The dedicated browsers run hidden in the background and close with the widget.
 
@@ -442,7 +415,7 @@ programs running as the same user can still reach DevTools. See
 | --- | --- |
 | `Official usage sync failed` (timed out) | Right-click → `Fix sync issues` → `Restart reader browser` |
 | `Sign-in needed` / `needs sign-in` | Click `↻`, or `Fix sync issues` → `Re-sign in (browser)` |
-| Codex numbers differ from the ChatGPT app | Make sure `Codex data source` is `Official page (browser)` |
+| Codex numbers differ from the ChatGPT app | Click `↻`, or `Fix sync issues` → `Restart reader browser` |
 | The folder will not delete | Exit the widget, close any cmd/Explorer window inside the folder, try again |
 | Anything else | Check `%LOCALAPPDATA%\ClaudeCodexUsage\error.log` |
 
@@ -452,8 +425,7 @@ programs running as the same user can still reach DevTools. See
 | --- | --- |
 | `claude_usage.pyw` | Widget UI, notification icon, display and view modes, uninstall |
 | `usage.py` | Claude usage from the official Usage page (browser) |
-| `codex_web.py` | Codex usage from the official ChatGPT page (browser, the default) |
-| `codex_usage.py` | Codex usage from local `~/.codex` logs (`Local CLI log` mode) |
+| `codex_web.py` | Codex usage from the official ChatGPT page (browser) |
 | `title_badges.py` | Title-bar badges (helper process) |
 | `install.py` / `install.cmd` | Installation and shortcuts |
 | `uninstall.cmd` | Full removal |

@@ -25,7 +25,6 @@ from tkinter import messagebox
 APP_VERSION = "0.9.1"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
-CODEX_SCRIPT = BASE_DIR / "codex_usage.py"
 CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
 SELF_SCRIPT = BASE_DIR / "claude_usage.pyw"
 BADGES_SCRIPT = BASE_DIR / "title_badges.py"
@@ -59,7 +58,7 @@ STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
 MAIN_PORT = 47671
 WATCH_PORT = 47672
 CREATE_NO_WINDOW = 0x08000000
-UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_usage.py", "codex_web.py", "title_badges.py", "install.py", "install.cmd")
+UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_web.py", "title_badges.py", "install.py", "install.cmd")
 # "autoshow" is the watcher noticing an app launch; "show" is the user asking.
 CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "hide", "toggle", "exit")}
 
@@ -75,30 +74,28 @@ CODEX_SITE = "https://chatgpt.com/codex/settings/usage"
 REPO_URL = "https://github.com/minsk8775/claude-codex-usage"
 # The widget shows one page per source and flips between them with the on-screen
 # arrows. Each page reads its own latest.json and refreshes with its own script.
-# "connect" marks a source whose first sync may need an interactive login step
-# (Claude opens a browser); Codex reads local files, so it never does.
+# Both readers open their official usage page in a dedicated browser; a manual
+# sync that finds the page signed out opens that browser for the login.
 SOURCES = (
     {
         "key": "claude",
         "title": "CLAUDE USAGE",
         "latest": LATEST,
         "script": USAGE_SCRIPT,
-        "connect": True,
     },
     {
         "key": "codex",
         "title": "CODEX USAGE",
         "latest": CODEX_LATEST,
-        "script": CODEX_SCRIPT,
-        "connect": False,
+        "script": CODEX_WEB_SCRIPT,
     },
 )
 SOURCE_BY_KEY = {source["key"]: source for source in SOURCES}
 
 
 def bar_cap(key):
-    """Max bars a source may draw. Codex can show two buckets (general + a
-    model-specific one like Spark), so it needs room for four; Claude has two."""
+    """Max bars a source may draw. The ChatGPT page can list more limits than
+    Claude's two (e.g. per-model ones), so Codex gets room for four."""
     return 4 if key == "codex" else 2
 
 # View modes, chosen from the notification-icon right-click menu:
@@ -121,7 +118,6 @@ MODE_MENU = (
 MODE_BY_ID = {menu_id: mode for menu_id, mode, _key in MODE_MENU}
 LANG_KO_ID = 3000
 LANG_EN_ID = 3001
-SPARK_TOGGLE_ID = 1004
 UNINSTALL_ID = 1005
 FIX_RETRY_ID = 1006
 FIX_RECONNECT_ID = 1007
@@ -136,12 +132,6 @@ DISPLAY_MENU = (
     (3202, "both", "display_both"),
 )
 DISPLAY_BY_ID = {menu_id: mode for menu_id, mode, _key in DISPLAY_MENU}
-# Codex data source: the official ChatGPT usage page (browser) or the local
-# Codex CLI logs. Browser sees app/web usage too; local needs no login.
-CODEX_SOURCES = ("web", "local")
-DEFAULT_CODEX_SOURCE = "web"
-CODEX_SRC_WEB_ID = 3100
-CODEX_SRC_LOCAL_ID = 3101
 
 # UI language. The widget chrome, the update badge and the two reader scripts
 # (via a --lang flag) all follow this. Default Korean; switch in the right-click
@@ -160,14 +150,11 @@ STRINGS = {
     "mode_both_stacked": {"ko": "둘 다 보기", "en": "Both (stacked)"},
     "mode_both_paged": {"ko": "둘 다 (좌우 전환)", "en": "Both (arrows)"},
     "always_on_top": {"ko": "항상 위 (Always on top)", "en": "Always on top"},
-    "show_spark": {"ko": "Codex Spark 사용량도 표시", "en": "Also show Codex Spark usage"},
     "display_mode": {"ko": "표시 방식", "en": "Display"},
     "display_widget": {"ko": "위젯만", "en": "Widget only"},
     "display_badges": {"ko": "앱 제목 표시줄 배지만", "en": "Title-bar badges only"},
     "display_both": {"ko": "위젯 + 제목 표시줄 배지", "en": "Widget + title-bar badges"},
-    "codex_source": {"ko": "Codex 데이터 소스", "en": "Codex data source"},
-    "codex_source_web": {"ko": "공식 페이지 (브라우저)", "en": "Official page (browser)"},
-    "codex_source_local": {"ko": "로컬 CLI 기록", "en": "Local CLI log"},
+    "update_failed": {"ko": "동기화 실패 (error.log 참고)", "en": "Update failed (see error.log)"},
     "fix_sync": {"ko": "동기화 문제 해결", "en": "Fix sync issues"},
     "fix_retry": {"ko": "다시 시도", "en": "Retry now"},
     "fix_reconnect": {"ko": "다시 로그인 (브라우저 창)", "en": "Re-sign in (browser)"},
@@ -210,11 +197,8 @@ MENU_ACTIONS = {
     SHOW_HIDE_ID: ("toggle", None),
     EXIT_ID: ("exit", None),
     ON_TOP_ID: ("toggle_ontop", None),
-    SPARK_TOGGLE_ID: ("toggle_spark", None),
     LANG_KO_ID: ("lang", "ko"),
     LANG_EN_ID: ("lang", "en"),
-    CODEX_SRC_WEB_ID: ("codex_source", "web"),
-    CODEX_SRC_LOCAL_ID: ("codex_source", "local"),
     RESET_POS_ID: ("reset_position", None),
     UNINSTALL_ID: ("uninstall", None),
     FIX_RETRY_ID: ("recover", "retry"),
@@ -225,7 +209,7 @@ MENU_ACTIONS.update({menu_id: ("mode", mode) for menu_id, mode, _key in MODE_MEN
 MENU_ACTIONS.update({menu_id: ("display", mode) for menu_id, mode, _key in DISPLAY_MENU})
 
 
-def menu_spec(lang, mode, on_top, show_spark, display, codex_source):
+def menu_spec(lang, mode, on_top, display):
     """The right-click menu, shared by the notification icon (Win32) and the
     widget (Tk). An item is (kind, id, label, checked, enabled) with kind
     'cmd', 'check' or 'radio'; ('sub', label, items) is a submenu; None is a
@@ -241,15 +225,11 @@ def menu_spec(lang, mode, on_top, show_spark, display, codex_source):
           for menu_id, value, key in MODE_MENU),
         None,
         item("check", ON_TOP_ID, "always_on_top", on_top, widget),
-        item("check", SPARK_TOGGLE_ID, "show_spark", show_spark),
         ("sub", tr(lang, "display_mode"),
          [item("radio", menu_id, key, value == display) for menu_id, value, key in DISPLAY_MENU]),
         ("sub", tr(lang, "language"),
          [item("radio", LANG_KO_ID, "lang_ko", lang != "en"),
           item("radio", LANG_EN_ID, "lang_en", lang == "en")]),
-        ("sub", tr(lang, "codex_source"),
-         [item("radio", CODEX_SRC_WEB_ID, "codex_source_web", codex_source != "local"),
-          item("radio", CODEX_SRC_LOCAL_ID, "codex_source_local", codex_source == "local")]),
         ("sub", tr(lang, "fix_sync"),
          [item("cmd", FIX_RETRY_ID, "fix_retry"),
           item("cmd", FIX_RESTART_ID, "fix_restart"),
@@ -509,9 +489,7 @@ class TrayIcon:
         self.current_mode = DEFAULT_MODE
         self.current_on_top = True
         self.current_lang = DEFAULT_LANG
-        self.current_show_spark = False
         self.current_display = DEFAULT_DISPLAY
-        self.current_codex_source = DEFAULT_CODEX_SOURCE
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
@@ -563,8 +541,7 @@ class TrayIcon:
         user32 = ctypes.windll.user32
         menu = user32.CreatePopupMenu()
         self._fill_menu(menu, menu_spec(
-            self.current_lang, self.current_mode, self.current_on_top,
-            self.current_show_spark, self.current_display, self.current_codex_source,
+            self.current_lang, self.current_mode, self.current_on_top, self.current_display,
         ))
         point = POINT()
         user32.GetCursorPos(ctypes.byref(point))
@@ -992,18 +969,11 @@ class UsageApp:
         lang = settings.get("lang", DEFAULT_LANG)
         self.lang = lang if lang in LANGS else DEFAULT_LANG
         self.on_top = bool(settings.get("on_top", True))
-        # Codex model-specific (Spark) buckets are hidden by default; the general
-        # account limit is what most users track. Toggle in the right-click menu.
-        self.show_spark = bool(settings.get("show_spark", False))
         # Display: the floating widget, small badges pinned to the Claude / Codex
         # app title bars (drawn by the title_badges.py helper), or both.
         display = settings.get("display")
         self.display = display if display in DISPLAY_MODES else DEFAULT_DISPLAY
         self.badge_process = None
-        # Codex data source: the official ChatGPT usage page (browser, sees
-        # app/web usage) by default, or the local Codex CLI log (no login).
-        codex_source = settings.get("codex_source", DEFAULT_CODEX_SOURCE)
-        self.codex_source = codex_source if codex_source in CODEX_SOURCES else DEFAULT_CODEX_SOURCE
         self.app_ids = set()  # installed app AUMIDs; filled in the background
         self.auto_view = "both_stacked"  # effective view when mode == "auto"
         self._known_app_keys = set()
@@ -1092,9 +1062,7 @@ class UsageApp:
         self.tray.current_mode = self.mode
         self.tray.current_on_top = self.on_top
         self.tray.current_lang = self.lang
-        self.tray.current_show_spark = self.show_spark
         self.tray.current_display = self.display
-        self.tray.current_codex_source = self.codex_source
         self.tray.start()
         self._update_badges()
         self.listener = threading.Thread(target=self._listen, daemon=True)
@@ -1218,10 +1186,6 @@ class UsageApp:
                 self._toggle_on_top()
             elif action == "display":
                 self._set_display(payload)
-            elif action == "toggle_spark":
-                self._toggle_spark()
-            elif action == "codex_source":
-                self._set_codex_source(payload)
             elif action == "reset_position":
                 self._reset_position()
             elif action == "uninstall":
@@ -1278,19 +1242,6 @@ class UsageApp:
             target=self._sync_worker, args=(sources, manual, self.lang), daemon=True
         ).start()
 
-    def _reader_for(self, source):
-        """(script, needs_connect, extra_args) for a source's reader.
-
-        Codex has two readers: the browser reader (official page, sees app/web
-        usage, needs a ChatGPT login) and the local CLI-log reader (no login,
-        honours the Spark toggle). Everything else uses its fixed script.
-        """
-        if source["key"] == "codex":
-            if self.codex_source == "web":
-                return CODEX_WEB_SCRIPT, True, []
-            return CODEX_SCRIPT, False, ["--spark", "on" if self.show_spark else "off"]
-        return source["script"], bool(source.get("connect")), []
-
     def _sync_worker(self, sources, manual, lang):
         # Refresh every source currently on screen, one at a time. In stacked
         # mode that is both; otherwise just the visible one, so viewing Codex
@@ -1300,21 +1251,21 @@ class UsageApp:
                 break
             key = source["key"]
             try:
-                script, connect, extra = self._reader_for(source)
-                result = run_script(script, "--sync", "--lang", lang, *extra)
+                script = source["script"]
+                result = run_script(script, "--sync", "--lang", lang)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)
                     )
                     raise RuntimeError("%s reader failed" % key)
                 data = self._load_latest(source)
-                if manual and connect and data.get("code") == "needs_login":
+                if manual and data.get("code") == "needs_login":
                     run_script(script, "--connect", "--lang", lang)
                 self.events.put(("sync_result", (key, data)))
             except Exception as error:
                 log_error(repr(error))
                 self.events.put(
-                    ("sync_result", (key, {"error": "update failed (see error.log)"}))
+                    ("sync_result", (key, {"error": tr(lang, "update_failed")}))
                 )
         self.events.put(("sync_done", None))
 
@@ -1460,13 +1411,6 @@ class UsageApp:
             except Exception as error:
                 log_error("badge helper stop: %r" % error)
 
-    def _toggle_spark(self):
-        self.show_spark = not self.show_spark
-        self.tray.current_show_spark = self.show_spark
-        self._save_settings()
-        # Re-sync Codex so its reader rebuilds the bars for the new setting.
-        self.start_sync(False)
-
     def _uninstall(self):
         """Confirm, then launch the uninstaller and quit. The uninstaller stops
         the watcher, closes the dedicated browsers, and removes shortcuts,
@@ -1513,11 +1457,11 @@ class UsageApp:
         for source in sources:
             if self.exiting:
                 return
-            script, connect, _extra = self._reader_for(source)
+            script = source["script"]
             try:
                 if action == "restart":
                     run_script(script, "--close", "--lang", lang, timeout=30)
-                elif action == "reconnect" and connect:
+                elif action == "reconnect":
                     run_script(script, "--connect", "--lang", lang, timeout=90)
             except Exception as error:
                 log_error("recover %s %s: %r" % (action, source["key"], repr(error)))
@@ -1525,21 +1469,6 @@ class UsageApp:
         # opened the sign-in window; leave the resync to the user (after login).
         if action == "restart":
             self.events.put(("recover_done", None))
-
-    def _set_codex_source(self, source):
-        if source not in CODEX_SOURCES or source == self.codex_source:
-            return
-        self.codex_source = source
-        self.tray.current_codex_source = source
-        # The two readers write the same cache; drop the stale one so the widget
-        # shows "syncing" until the newly chosen reader reports.
-        self.datas["codex"] = {"error": self._t("syncing")}
-        if not self._stacked() and self._source()["key"] == "codex":
-            self.data = self.datas["codex"]
-        self._save_settings()
-        self._draw()
-        self._place()
-        self.start_sync(False)
 
     def _load_latest(self, source=None):
         source = source or self._source()
@@ -1575,9 +1504,7 @@ class UsageApp:
                         "mode": self.mode,
                         "on_top": self.on_top,
                         "lang": self.lang,
-                        "show_spark": self.show_spark,
                         "display": self.display,
-                        "codex_source": self.codex_source,
                         "position": (
                             {"x": int(self.pos_x), "bottom": int(self.bottom_anchor)}
                             if self.user_moved and self.pos_x is not None
@@ -1704,8 +1631,6 @@ class UsageApp:
         """Draw one usage bar (label, percent, track/fill, reset text) at row_y."""
         pct = max(0.0, min(float(bar.get("pct", 0)), 100.0))
         color = "#F1707B" if pct >= 90 else "#F5A85F" if pct >= 75 else "#2F7DFF"
-        if bar.get("stale"):
-            color = "#999999"
         self.canvas.create_text(
             pad, row_y, text=str(bar.get("label", "")), anchor="w",
             fill="#FFFFFF", font=self._font(10, "bold"),
@@ -1994,7 +1919,7 @@ class UsageApp:
         menu = tk.Menu(self.root, tearoff=0)
         menu.variables = []
         self._fill_tk_menu(menu, menu_spec(
-            self.lang, self.mode, self.on_top, self.show_spark, self.display, self.codex_source,
+            self.lang, self.mode, self.on_top, self.display,
         ))
         if x is None:
             x = self.root.winfo_pointerx()

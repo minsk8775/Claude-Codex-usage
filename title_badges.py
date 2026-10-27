@@ -63,7 +63,6 @@ STRINGS = {
     "session": {"ko": "세션", "en": "Session"},
     "weekly": {"ko": "주간", "en": "Weekly"},
     "soon": {"ko": "곧 초기화", "en": "resets soon"},
-    "stale": {"ko": "오래된 기록", "en": "stale"},
     "syncing": {"ko": "동기화 중…", "en": "Syncing…"},
     "login": {"ko": "로그인 필요", "en": "Sign-in needed"},
     "failed": {"ko": "동기화 실패", "en": "Sync failed"},
@@ -81,9 +80,7 @@ def tr(lang, key):
 # Pure helpers (no Windows calls; covered by tests)
 # --------------------------------------------------------------------------- #
 
-def level_color(pct, stale):
-    if stale or pct is None:
-        return "#999999"
+def level_color(pct):
     if pct >= 90:
         return "#F1707B"
     if pct >= 75:
@@ -144,15 +141,13 @@ def short_reset(sub, lang="ko", now=None):
     """Compact reset text for the badge's bottom line.
 
     Accepts the readers' sub-lines: '2시간 12분 후 재설정', '(월) 오전 8:00에 재설정',
-    the Codex page's '2026. 9. 19. 오후 5:10 초기화' (turned into time left), and the
-    local reader's two-line 'Recorded …\\n<status>' form (last line wins).
+    and the Codex page's '2026. 9. 19. 오후 5:10 초기화' (turned into time left).
+    A multi-line sub-line uses its last line.
     """
     lines = [line.strip() for line in str(sub or "").splitlines() if line.strip()]
     if not lines:
         return ""
     line = lines[-1]
-    if "오래된" in line or "stale" in line.lower():
-        return tr(lang, "stale")
     match = _KO_DATE.search(line)
     if match:
         year, month, day, meridiem, hour, minute = match.groups()
@@ -202,7 +197,6 @@ def columns(data, lang="ko", now=None):
             "pct": pct,
             "pct_text": str(bar.get("pct_text") or "%g%%" % pct),
             "reset": short_reset(bar.get("sub"), lang, now),
-            "stale": bool(bar.get("stale")),
         })
     return result
 
@@ -443,7 +437,7 @@ class Badge:
                                    fill=WARN, font=label_font)
                 x += col_width + int(COL_GAP * s)
                 continue
-            color = level_color(col["pct"], col["stale"])
+            color = level_color(col["pct"])
             y1 = y_label
             canvas.create_text(x, y1, text=col["label"], anchor="nw", fill=DIM, font=label_font)
             canvas.create_text(x + col_width, y1, text=col["pct_text"], anchor="ne",

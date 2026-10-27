@@ -1,10 +1,9 @@
 """Read Codex/Work usage from the official ChatGPT usage page.
 
-The local reader (codex_usage.py) only sees usage that goes through the Codex
-CLI; usage from the ChatGPT app/web is not written to ~/.codex. This reader
-opens the real usage page in a dedicated browser profile and reads the numbers
-ChatGPT renders there, so app/web usage is included -- the same idea as the
-Claude reader (usage.py), whose browser plumbing this module reuses.
+This reader opens the real usage page in a dedicated browser profile and reads
+the numbers ChatGPT renders there, so usage from the ChatGPT/Codex apps, the web
+and the CLI is all included -- the same idea as the Claude reader (usage.py),
+whose browser plumbing this module reuses.
 
 The browser owns the login session; this script never reads cookies, tokens, or
 credential files. It only reads the rendered page.
@@ -225,7 +224,6 @@ def make_payload(data):
             "pct": parsed["used"],
             "pct_text": "%g%%" % parsed["used"],
             "sub": sub,
-            "stale": False,
         })
     if not bars:
         raise SyncError(

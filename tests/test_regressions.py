@@ -1,15 +1,13 @@
 """Offline regression tests: no real profiles, usage logs or installed widget."""
 import importlib.machinery
 import importlib.util
-import io
-import json
 import os
 import queue
 import socket
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -25,7 +23,6 @@ def load(name, filename):
     return module
 
 
-codex = load("tested_codex", "codex_usage.py")
 claude = load("tested_claude", "usage.py")
 badges = load("tested_badges", "title_badges.py")
 sys.path.insert(0, str(REPO))  # codex_web imports usage
@@ -43,7 +40,6 @@ class BadgeTests(unittest.TestCase):
             "2026. 10. 24. 오후 5:10 초기화": "2일 2시간 후 초기화",
             "2026. 10. 22. 오전 12:30 초기화": "곧 초기화",
             "기록 10/22 14:58\n3시간 후 재설정": "3시간 후 초기화",
-            "기록 10/21 09:00\n오래된 기록 · Codex에서 갱신": "오래된 기록",
             "(월요일) 오전 8:00에 재설정": "(월) 오전 8:00",
             "주간 사용 한도와 동일 · 1시간 20분 후 초기화": "1시간 20분 후 초기화",
             "주간 사용 한도6일 16시간 후 초기화됩니다": "6일 16시간 후 초기화",
@@ -98,10 +94,9 @@ class BadgeTests(unittest.TestCase):
             self.assertEqual(app.shown_keys, shown, mode)
 
     def test_level_colors_match_the_widget(self):
-        self.assertEqual(badges.level_color(50, False), "#2F7DFF")
-        self.assertEqual(badges.level_color(80, False), "#F5A85F")
-        self.assertEqual(badges.level_color(95, False), "#F1707B")
-        self.assertEqual(badges.level_color(95, True), "#999999")
+        self.assertEqual(badges.level_color(50), "#2F7DFF")
+        self.assertEqual(badges.level_color(80), "#F5A85F")
+        self.assertEqual(badges.level_color(95), "#F1707B")
 
 
 class LanguageTests(unittest.TestCase):
@@ -136,28 +131,6 @@ class LanguageTests(unittest.TestCase):
                          [("Session", "2 hr 12 min"), ("Weekly", "Mon 8:00 AM")])
 
 
-CODEX_FIXTURE_LINES = [
-    # An early session line with no rate-limit snapshot yet.
-    {"timestamp": "2026-08-30T10:00:00Z", "type": "event_msg",
-     "payload": {"type": "token_count", "rate_limits": None,
-                 "total_token_usage": {"total_tokens": 10}}},
-    # A newer file might briefly write null again; we must not pick this over a
-    # real snapshot that is older in wall-clock terms.
-    {"timestamp": "2026-08-31T09:00:00Z", "type": "event_msg",
-     "payload": {"type": "token_count", "rate_limits": None}},
-    # The real, newest snapshot.
-    {"timestamp": "2026-08-31T12:34:00Z", "type": "event_msg",
-     "payload": {"type": "token_count",
-                 "rate_limits": {
-                     "limit_id": "codex",
-                     "primary": {"used_percent": 100.0, "window_minutes": 300,
-                                 "resets_at": 1000000000 + 2 * 3600},
-                     "secondary": {"used_percent": 69.0, "window_minutes": 10080,
-                                   "resets_at": 1000000000 + 19 * 3600},
-                     "plan_type": "pro"}}},
-]
-
-
 WEB_FIXTURE_BLOCKS = [
     # The weekly shared limit as the page renders it (label / value / 남음 / reset).
     ["주간 사용 한도", "35%", "남음", "2026. 9. 19. 오후 5:10 초기화"],
@@ -166,74 +139,8 @@ WEB_FIXTURE_BLOCKS = [
 ]
 
 
-class ReaderFixtureTests(unittest.TestCase):
-    def test_local_reader_parses_a_synthetic_rollout(self):
-        # Moved from `codex_usage.py --self-test`.
-        with patch.object(codex, "LANG", "ko"):
-            with tempfile.TemporaryDirectory(prefix="codexusage-test-") as home:
-                day = os.path.join(codex.sessions_dir(home), "2026", "08", "31")
-                os.makedirs(day, exist_ok=True)
-                with open(os.path.join(day, "rollout-2026-08-31T12-30-00-abc.jsonl"),
-                          "w", encoding="utf-8") as handle:
-                    for line in CODEX_FIXTURE_LINES:
-                        handle.write(json.dumps(line) + "\n")
-
-                limits, event_epoch = codex.newest_snapshot(home)
-                assert limits is not None, "snapshot not found"
-                assert limits["plan_type"] == "pro"
-                # Pin 'now' so the reset text is deterministic regardless of today.
-                now = event_epoch
-                limits["primary"]["resets_at"] = now + 2 * 3600
-                limits["secondary"]["resets_at"] = now + 19 * 3600
-                payload = codex.make_payload(limits, event_epoch, now_epoch=now)
-                assert payload["bars"][0]["label"] == "현재 세션", payload["bars"][0]
-                assert payload["bars"][1]["label"] == "주간 한도", payload["bars"][1]
-                assert payload["bars"][0]["pct"] == 100.0
-                assert payload["bars"][1]["pct"] == 69.0
-                assert payload["bars"][0]["sub"].endswith("2시간 후 재설정"), payload["bars"][0]["sub"]
-                assert payload["bars"][1]["sub"].endswith("19시간 후 재설정"), payload["bars"][1]["sub"]
-                assert payload["plan_type"] == "pro"
-                # The general bucket carries no model tag.
-                assert "bucket_name" not in payload, payload
-
-                # A model-specific bucket gets a compact tag on its bars, and a fresher
-                # model bucket wins over an older general one (the real-world case that
-                # used to freeze the widget on a stale general value).
-                assert codex.bucket_tag({"limit_id": "codex"}) == ""
-                assert codex.bucket_tag({"limit_id": "codex_bengalfox",
-                                   "limit_name": "GPT-5.3-Codex-Spark"}) == "Spark"
-                spark = {"limit_id": "codex_bengalfox", "limit_name": "GPT-5.3-Codex-Spark",
-                         "primary": {"used_percent": 12.0, "window_minutes": 300,
-                                     "resets_at": now + 3 * 3600},
-                         "secondary": {"used_percent": 4.0, "window_minutes": 10080,
-                                       "resets_at": now + 5 * 86400}}
-                sp = codex.make_payload(spark, now, now_epoch=now)
-                assert sp["bars"][0]["label"] == "현재 세션 · Spark", sp["bars"][0]
-                assert sp["bars"][1]["label"] == "주간 한도 · Spark", sp["bars"][1]
-                assert sp["limit_id"] == "codex_bengalfox", sp
-                assert sp["bucket_name"] == "GPT-5.3-Codex-Spark", sp
-                with open(os.path.join(day, "rollout-2026-08-31T13-00-00-def.jsonl"),
-                          "w", encoding="utf-8") as handle:
-                    handle.write(json.dumps({
-                        "timestamp": "2026-08-31T13:00:00Z", "type": "event_msg",
-                        "payload": {"type": "token_count", "rate_limits": {
-                            "limit_id": "codex_bengalfox",
-                            "limit_name": "GPT-5.3-Codex-Spark",
-                            "primary": {"used_percent": 7.0, "window_minutes": 300}}}}) + "\n")
-                picked, _ = codex.newest_snapshot(home)
-                assert picked.get("limit_id") == "codex_bengalfox", picked
-
-                # Window-label fallbacks for durations without a friendly name.
-                assert codex.window_label(1440) == "일일 한도"
-                assert codex.window_label(180) == "3시간 한도"
-                assert codex.window_label(90) == "90분 한도"
-                # Relative reset (older schema) resolves against the event time.
-                rel = codex.make_bar({"used_percent": 5, "window_minutes": 300,
-                                "resets_in_seconds": 3600}, now, now_epoch=now)
-                assert rel["sub"].endswith("1시간 후 재설정"), rel["sub"]
-
+class CodexWebTests(unittest.TestCase):
     def test_web_reader_parses_page_blocks(self):
-        # Moved from `codex_web.py --self-test`.
         self.addCleanup(setattr, web, "LANG", web.LANG)
         self.addCleanup(setattr, web.usage, "LANG", web.usage.LANG)
         web.LANG = web.usage.LANG = "ko"
@@ -244,7 +151,6 @@ class ReaderFixtureTests(unittest.TestCase):
         assert bar["pct"] == 65.0, bar          # 35% 남음 -> 65% 사용
         assert bar["pct_text"] == "65%", bar
         assert "초기화" in bar["sub"], bar
-        assert bar["stale"] is False, bar
 
         # English "used" wording is taken as used, not converted.
         used_block = web.parse_block(["Weekly limit", "42% used", "resets Sep 19"])
@@ -271,116 +177,6 @@ class ReaderFixtureTests(unittest.TestCase):
         assert web.normalize_label("5시간 사용 한도") == "5-hour limit"
         web.LANG = web.usage.LANG = "ko"
         assert web.normalize_label("Weekly usage limit") == "주간 한도"
-
-
-class CodexTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name)
-        (self.home / "sessions").mkdir()
-        self.rollout = self.home / "sessions" / "rollout-test.jsonl"
-        self.now = datetime.now(timezone.utc).timestamp()
-        codex.LANG = "en"
-
-    def event(self, percent=85, limit_id="codex", age=1, reset_in=3600):
-        return {
-            "timestamp": self.now - age,
-            "type": "event_msg",
-            "payload": {"type": "token_count", "rate_limits": {
-                "limit_id": limit_id,
-                "primary": {"used_percent": percent, "window_minutes": 300,
-                            "resets_at": self.now + reset_in},
-            }},
-        }
-
-    def write(self, *rows):
-        self.rollout.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-
-    def test_spark_off_prefers_the_active_general_bucket(self):
-        # Default (Spark off): while the general bucket is active it is shown
-        # alone, even next to a model bucket that is also fresh.
-        self.write(self.event(85, age=2), self.event(2, "codex_bengalfox", age=1))
-        payload = codex.sync_usage(str(self.home))
-        self.assertEqual(len(payload["bars"]), 1)
-        self.assertEqual(payload["bars"][0]["pct"], 85)
-        self.assertEqual(payload["limit_id"], "codex")
-
-    def test_spark_off_falls_back_to_model_when_general_is_stale(self):
-        # The real bug: heavy Codex-Spark use while the general bucket sat ~25h
-        # old. Off mode must not freeze on it — it shows the fresh model bucket.
-        self.write(self.event(85, age=100000), self.event(2, "codex_bengalfox", age=1))
-        payload = codex.sync_usage(str(self.home))
-        self.assertEqual(payload["bars"][0]["pct"], 2)
-        self.assertEqual(payload["limit_id"], "codex_bengalfox")
-        self.assertTrue(payload["bars"][0]["label"].endswith("bengalfox"))
-
-    def test_spark_on_shows_both_active_buckets(self):
-        self.write(self.event(85, age=2), self.event(2, "codex_bengalfox", age=1))
-        payload = codex.sync_usage(str(self.home), show_spark=True)
-        self.assertEqual(len(payload["bars"]), 2)
-        self.assertEqual(payload["bars"][0]["pct"], 85)      # general first
-        self.assertEqual(payload["bars"][1]["pct"], 2)       # model second
-        self.assertTrue(payload["bars"][1]["label"].endswith("bengalfox"))
-
-    def test_model_only_usage_is_shown_with_a_tag(self):
-        self.write(self.event(2, "codex_bengalfox"))
-        payload = codex.sync_usage(str(self.home))
-        self.assertEqual(payload["bars"][0]["pct"], 2)
-        self.assertEqual(payload["limit_id"], "codex_bengalfox")
-
-    def test_legacy_unidentified_snapshot_is_supported(self):
-        row = self.event()
-        del row["payload"]["rate_limits"]["limit_id"]
-        self.write(row)
-        self.assertEqual(codex.sync_usage(str(self.home))["bars"][0]["pct"], 85)
-
-    def test_expired_snapshot_keeps_observation_time_and_warns(self):
-        self.write(self.event(100, age=86400, reset_in=-3600))
-        payload = codex.sync_usage(str(self.home))
-        self.assertEqual(datetime.fromisoformat(payload["observed_at"]).timestamp(), self.now - 86400)
-        self.assertTrue(payload["bars"][0]["stale"])
-        self.assertIn("stale", payload["bars"][0]["sub"].lower())
-        self.assertNotEqual(payload["bars"][0]["pct_text"], "100%")
-
-    def test_old_unexpired_snapshot_is_also_marked_stale(self):
-        self.write(self.event(age=86400, reset_in=3600))
-        self.assertTrue(codex.sync_usage(str(self.home))["bars"][0]["stale"])
-
-    def test_non_finite_numbers_and_nested_fake_events_are_ignored(self):
-        fake = {"type": "response_item", "timestamp": self.now,
-                "payload": {"tool_result": self.event(1, age=0)["payload"]}}
-        self.write(self.event(age=5), self.event(float("nan"), age=2),
-                   self.event(float("inf"), age=1), fake)
-        self.assertEqual(codex.sync_usage(str(self.home))["bars"][0]["pct"], 85)
-
-    def test_malformed_shapes_and_deep_json_do_not_hide_valid_snapshot(self):
-        self.write(self.event(age=5), [self.event(1)], self.event(age=0))
-        with self.rollout.open("a", encoding="utf-8") as stream:
-            stream.write('[' * 2000 + '"token_count"' + ']' * 2000 + '\n')
-        self.assertEqual(codex.sync_usage(str(self.home))["bars"][0]["pct"], 85)
-
-    def test_oversized_line_is_discarded_without_unbounded_reads(self):
-        self.write(self.event())
-        text = 'x' * 5000 + '\n' + self.rollout.read_text(encoding="utf-8")
-        class BoundedReader(io.StringIO):
-            def readline(self, size=-1):
-                if size < 0 or size > 1025:
-                    raise AssertionError("unbounded log read")
-                return super().readline(size)
-            def __iter__(self):
-                raise AssertionError("unbounded log iteration")
-        with patch.object(codex, "MAX_LINE_CHARS", 1024), patch("builtins.open", return_value=BoundedReader(text)):
-            self.assertEqual(codex.newest_snapshot(str(self.home))[0]["primary"]["used_percent"], 85)
-
-    def test_invalid_numeric_timestamps_do_not_crash(self):
-        for value in (True, float("nan"), float("inf"), "1e999", 1e100, 10**400):
-            with self.subTest(value=value):
-                self.assertIsNone(codex.parse_time(value))
-
-    def test_huge_integers_do_not_hide_valid_usage(self):
-        self.write(self.event(age=2), self.event(10**400))
-        self.assertEqual(codex.sync_usage(str(self.home))["bars"][0]["pct"], 85)
 
 
 class BrowserTests(unittest.TestCase):
@@ -488,8 +284,6 @@ class WidgetTests(unittest.TestCase):
         app.syncing = False
         app.pending_sync = None
         app.lang = "ko"
-        app.show_spark = False
-        app.codex_source = "web"
         app.display = "widget"
         app.datas = {"claude": {}, "codex": {"error": "no cache"}}
         app.data = {}
@@ -594,37 +388,12 @@ class WidgetTests(unittest.TestCase):
         app._load_latest.assert_not_called()
         self.assertIn("error", app.events.get_nowait()[1][1])
 
-    def test_local_codex_reader_receives_the_spark_setting(self):
-        for enabled, flag in ((False, "off"), (True, "on")):
-            app = self.app()
-            app.codex_source = "local"
-            app.show_spark = enabled
-            app._load_latest = Mock(return_value={"bars": []})
-            with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
-                app._sync_worker([widget.SOURCE_BY_KEY["codex"]], False, "en")
-            args = run.call_args.args
-            self.assertIs(args[0], widget.CODEX_SCRIPT)
-            self.assertIn("--spark", args)
-            self.assertEqual(args[args.index("--spark") + 1], flag)
-
-    def test_web_codex_source_uses_the_browser_reader_without_spark(self):
+    def test_codex_syncs_through_the_browser_reader(self):
         app = self.app()
-        app.codex_source = "web"
-        app.show_spark = True
         app._load_latest = Mock(return_value={"bars": []})
         with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
             app._sync_worker([widget.SOURCE_BY_KEY["codex"]], False, "en")
-        args = run.call_args.args
-        self.assertIs(args[0], widget.CODEX_WEB_SCRIPT)
-        self.assertNotIn("--spark", args)
-
-    def test_claude_reader_is_not_passed_the_spark_flag(self):
-        app = self.app()
-        app.show_spark = True
-        app._load_latest = Mock(return_value={"bars": []})
-        with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")) as run:
-            app._sync_worker([widget.SOURCE_BY_KEY["claude"]], False, "en")
-        self.assertNotIn("--spark", run.call_args.args)
+        self.assertIs(run.call_args.args[0], widget.CODEX_WEB_SCRIPT)
 
     def test_recover_restart_closes_reader_and_requests_resync(self):
         app = self.app()
@@ -712,7 +481,7 @@ class WidgetTests(unittest.TestCase):
                     yield from flat(entry[2])
                 elif entry:
                     yield entry
-        items = list(flat(widget.menu_spec("en", "claude", True, False, "badges", "web")))
+        items = list(flat(widget.menu_spec("en", "claude", True, "badges")))
         self.assertTrue(all(entry[1] in widget.MENU_ACTIONS for entry in items))
         enabled = {entry[1]: entry[4] for entry in items}
         checked = {entry[1]: entry[3] for entry in items}

@@ -17,8 +17,8 @@ acknowledgement within a few days.
   a dedicated Chrome/Edge profile and reads only the rendered meter values via the
   DevTools protocol. It **never reads cookies, tokens, `localStorage`, or any
   credential file.** Your sign-in lives only inside that browser profile directory.
-- **Codex usage** (`codex_usage.py`) reads the rate-limit snapshot the Codex CLI
-  already wrote under `~/.codex/sessions`. No browser, no network, no login.
+- **Codex usage** (`codex_web.py`) reads the official ChatGPT usage page the same
+  way, in its own dedicated profile, with the same guarantees.
 - Neither reader calls a model, so checking usage never consumes quota.
 
 ## Trust model
@@ -94,15 +94,6 @@ Every external process (`git`, `powershell`, `explorer.exe`, the Python readers,
 the target apps) is started with an argument **list**, never `shell=True` and never
 a shell string. App launch targets (AUMIDs and fallback URLs) are hard-coded
 constants, so no untrusted value reaches a command line.
-
-### Defensive parsing of local session logs
-`codex_usage.py` reads rollout lines in bounded chunks and discards the entire
-oversized line, so a large line is never allocated in full. Malformed/deeply
-nested JSON, invalid shapes, non-finite percentages and invalid timestamps are
-ignored. Only actual `token_count` events are accepted, not matching objects
-nested in tool output. Model-specific limit IDs cannot replace the general
-Codex bucket. Recorded timestamps and stale indicators make the limits of local
-snapshots visible.
 
 ### Secrets stay out of Git
 `.gitignore` excludes the generated snapshots (`latest.json`, `codex_latest.json`),

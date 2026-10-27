@@ -24,6 +24,11 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   Windows에서 테스트가 자동으로 돕니다.
 
 ### Removed
+- **Codex `로컬 CLI 기록` 데이터 소스와 `Codex Spark 사용량도 표시` 토글**: Codex 사용량은
+  이제 공식 페이지(브라우저)로만 읽습니다. 로컬 기록은 Codex CLI로 요청할 때만 갱신돼,
+  Codex·ChatGPT 앱 위주로 쓰면 값이 멈춰 보였습니다. `codex_usage.py`, 메뉴의
+  `Codex 데이터 소스`·Spark 항목, `오래된 기록` 표시가 함께 빠졌습니다. 예전 설정 파일의
+  해당 값은 무시합니다.
 - 0.1.0 이전 단독 위젯(Claude 전용·Codex 전용) 정리 기능과 `cleanup-legacy.cmd`.
 - 갱신이 멈춘 `HISTORY.md`와 쓰지 않는 `assets/screenshot.svg`.
 
