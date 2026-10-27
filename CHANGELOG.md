@@ -310,17 +310,3 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.8.4]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.8.3]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.8.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.8.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.8.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.7.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.6.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.6.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.6.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.5.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.4.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.3.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.2.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
-[0.1.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
