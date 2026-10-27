@@ -3,6 +3,7 @@ import importlib.machinery
 import importlib.util
 import os
 import queue
+import shutil
 import socket
 import subprocess
 import sys
@@ -493,11 +494,15 @@ class WidgetTests(unittest.TestCase):
             with patch.object(installer, "STATE_DIR", Path(temp) / "state"):
                 installer.create_shortcut(link, Path(sys.executable), '"%s" --watch' % installer.APP_SCRIPT, "test")
             self.assertTrue(link.exists())
+            # WScript.Shell cannot open that path either; read a copy.
+            copy = Path(tempfile.mkdtemp(prefix="ccu-read-")) / "copy.lnk"
+            self.addCleanup(shutil.rmtree, copy.parent, True)
+            shutil.copy(link, copy)
             read = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
                  "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK);"
                  "$s.TargetPath; $s.Arguments; $s.WorkingDirectory"],
-                env=dict(os.environ, LNK=str(link)), capture_output=True, text=True, check=True,
+                env=dict(os.environ, LNK=str(copy)), capture_output=True, text=True, check=True,
             ).stdout.splitlines()
             self.assertEqual(Path(read[0]).resolve(), Path(sys.executable).resolve())
             self.assertTrue(read[1].endswith("--watch"))
