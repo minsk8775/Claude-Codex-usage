@@ -3,8 +3,6 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
-## [Unreleased]
-
 ## [0.9.1] - 2026-10-27
 
 ### Fixed
