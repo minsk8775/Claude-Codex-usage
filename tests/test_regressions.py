@@ -500,9 +500,10 @@ class WidgetTests(unittest.TestCase):
             shutil.copy(link, copy)
             read = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
+                 "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
                  "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK);"
                  "$s.TargetPath; $s.Arguments; $s.WorkingDirectory"],
-                env=dict(os.environ, LNK=str(copy)), capture_output=True, text=True, check=True,
+                env=dict(os.environ, LNK=str(copy)), capture_output=True, encoding="utf-8", check=True,
             ).stdout.splitlines()
             self.assertEqual(Path(read[0]).resolve(), Path(sys.executable).resolve())
             self.assertTrue(read[1].endswith("--watch"))
