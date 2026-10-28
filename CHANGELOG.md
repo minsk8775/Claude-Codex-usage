@@ -3,6 +3,17 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.9.2] - 2026-10-28
+
+### Fixed
+- Save widget settings with the existing atomic JSON writer so an interrupted
+  save keeps the previous complete settings file.
+- Correct the documented UDP commands to `show`, `autoshow`, and `exit`.
+
+### Changed
+- Pin GitHub Actions to verified commit SHAs and test settings replacement and
+  replacement failures using temporary files.
+
 ## [0.9.1] - 2026-10-27
 
 ### Fixed
@@ -343,5 +354,6 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases

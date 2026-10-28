@@ -21,8 +21,10 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox
 
+from usage import atomic_json
 
-APP_VERSION = "0.9.1"
+
+APP_VERSION = "0.9.2"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
@@ -1456,24 +1458,21 @@ class UsageApp:
 
     def _save_settings(self):
         try:
-            STATE_DIR.mkdir(parents=True, exist_ok=True)
-            SETTINGS_FILE.write_text(
-                json.dumps(
-                    {
-                        "scale": round(self.scale, 3),
-                        "page": self.page,
-                        "mode": self.mode,
-                        "on_top": self.on_top,
-                        "lang": self.lang,
-                        "display": self.display,
-                        "position": (
-                            {"x": int(self.pos_x), "bottom": int(self.bottom_anchor)}
-                            if self.user_moved and self.pos_x is not None
-                            and self.bottom_anchor is not None else None
-                        ),
-                    }
-                ),
-                encoding="utf-8",
+            atomic_json(
+                str(SETTINGS_FILE),
+                {
+                    "scale": round(self.scale, 3),
+                    "page": self.page,
+                    "mode": self.mode,
+                    "on_top": self.on_top,
+                    "lang": self.lang,
+                    "display": self.display,
+                    "position": (
+                        {"x": int(self.pos_x), "bottom": int(self.bottom_anchor)}
+                        if self.user_moved and self.pos_x is not None
+                        and self.bottom_anchor is not None else None
+                    ),
+                },
             )
         except OSError as error:
             log_error(repr(error))

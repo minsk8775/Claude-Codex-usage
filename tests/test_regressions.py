@@ -1,6 +1,7 @@
 """Offline regression tests: no real profiles, usage logs or installed widget."""
 import importlib.machinery
 import importlib.util
+import json
 import os
 import queue
 import socket
@@ -315,6 +316,44 @@ class WidgetTests(unittest.TestCase):
         app._place = Mock()
         app.events = queue.Queue()
         return app
+
+    def test_settings_replace_only_after_complete_json_is_written(self):
+        app = self.app()
+        app.scale = 1.1254
+        app.user_moved, app.pos_x, app.bottom_anchor = True, 123, 456
+        expected = {"scale": 1.125, "page": 0, "mode": "auto", "on_top": True,
+                    "lang": "ko", "display": "widget", "position": {"x": 123, "bottom": 456}}
+        replace = os.replace
+        with tempfile.TemporaryDirectory() as temp:
+            settings = Path(temp) / "settings.json"
+            settings.write_text('{"lang":"en"}', encoding="utf-8")
+
+            def replace_complete(source, destination):
+                self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), {"lang": "en"})
+                self.assertEqual(json.loads(Path(source).read_text(encoding="utf-8")), expected)
+                replace(source, destination)
+
+            with patch.object(widget, "SETTINGS_FILE", settings), \
+                    patch("usage.os.replace", side_effect=replace_complete) as swap:
+                widget.UsageApp._save_settings(app)
+            swap.assert_called_once()
+            self.assertEqual(json.loads(settings.read_text(encoding="utf-8")), expected)
+            self.assertFalse(settings.with_suffix(".json.tmp").exists())
+
+    def test_settings_replace_failure_preserves_previous_settings_and_logs(self):
+        app = self.app()
+        app.scale, app.user_moved = 1.0, False
+        with tempfile.TemporaryDirectory() as temp:
+            settings = Path(temp) / "settings.json"
+            previous = '{"lang":"en"}'
+            settings.write_text(previous, encoding="utf-8")
+            with patch.object(widget, "SETTINGS_FILE", settings), \
+                    patch("usage.os.replace", side_effect=OSError("replacement failed")), \
+                    patch.object(widget, "log_error") as log:
+                widget.UsageApp._save_settings(app)
+            self.assertEqual(settings.read_text(encoding="utf-8"), previous)
+            log.assert_called_once()
+            self.assertIn("replacement failed", log.call_args.args[0])
 
     def test_hide_survives_ticks_and_reopens_when_app_relaunches(self):
         app = self.app()
