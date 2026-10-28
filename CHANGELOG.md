@@ -3,6 +3,17 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
+## [0.9.2] - 2026-10-28
+
+### Fixed
+- Save widget settings with the existing atomic JSON writer so an interrupted
+  save keeps the previous complete settings file.
+- Correct the documented UDP commands to `show`, `autoshow`, and `exit`.
+
+### Changed
+- Pin GitHub Actions to verified commit SHAs and test settings replacement and
+  replacement failures using temporary files.
+
 ## [0.9.1] - 2026-10-27
 
 ### Fixed
@@ -345,3 +356,4 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
+

@@ -83,7 +83,7 @@ upgrade. The interactive sign-in browser is not automatically terminated.
 ### Local control ports are loopback-only with a fixed command set
 The widget and its background watcher accept small UDP control messages on
 `127.0.0.1:47671` / `47672`. The widget accepts only the exact ASCII commands
-`show`, `hide`, `toggle`, and `exit`; the watcher accepts only `exit`. Internal
+`show`, `autoshow`, and `exit`; the watcher accepts only `exit`. Internal
 worker events such as `sync_result` cannot be injected through these sockets.
 Malformed and oversized messages are discarded. The widget's queue and the
 number of events handled per UI tick are bounded. Commands are never passed to a
@@ -104,8 +104,8 @@ not a substitute for checking what is being committed.
 ## Residual risks (accepted)
 
 - **Local processes can send control messages.** Any process running as your user
-  can send `show`/`hide`/`toggle`/`exit` UDP packets to the loopback control
-  ports. Impact is limited to showing, hiding, or closing the widget — no data
+  can send `show`/`autoshow`/`exit` UDP packets to the loopback control
+  ports. Impact is limited to showing or closing the widget — no data
   exfiltration and no code execution. Defending against same-user local processes
   is out of scope for a user-level widget.
 - **DevTools and the browser profile require local trust.** A process running as
@@ -122,3 +122,4 @@ not a substitute for checking what is being committed.
   machine on its own. The residual trust is only in what *you* choose to install
   when you run `git pull` after clicking the badge — review the diff on GitHub
   first, exactly as you would for any Git project.
+
