@@ -122,4 +122,3 @@ not a substitute for checking what is being committed.
   machine on its own. The residual trust is only in what *you* choose to install
   when you run `git pull` after clicking the badge — review the diff on GitHub
   first, exactly as you would for any Git project.
-

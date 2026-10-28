@@ -19,4 +19,3 @@ jobs:
           python-version: "3.12"
       - name: Offline regression tests
         run: python -m unittest discover -s tests -v
-
