@@ -559,6 +559,33 @@ class WidgetTests(unittest.TestCase):
         self.assertIsNone(rank("claude", r"C:\Users\me\claude-code\claude.exe"))
         self.assertIn(("codex", "codex"), widget.APP_KEY_BY_NAME)
 
+    def test_widget_right_click_menu_opens_and_every_item_works(self):
+        # 0.9.1 broke this: building a submenu raised, so right-click did nothing.
+        import tkinter as tk
+        app = self.app()
+        app.root = tk.Tk()
+        self.addCleanup(app.root.destroy)
+        app.mode, app.on_top, app.display = "auto", True, "both"
+        shown = []
+        with patch.object(tk.Menu, "tk_popup", lambda menu, x, y: shown.append(menu)):
+            app._show_context_menu(10, 10)
+        self.assertEqual(len(shown), 1)
+        events = []
+
+        def walk(menu):
+            for index in range(menu.index("end") + 1):
+                kind = menu.type(index)
+                if kind == "cascade":
+                    walk(menu.nametowidget(menu.entrycget(index, "menu")))
+                elif kind != "separator":
+                    menu.invoke(index)
+                    events.append(app.events.get_nowait())
+        walk(shown[0])
+        self.assertIn(("display", "badges"), events)
+        self.assertIn(("lang", "en"), events)
+        self.assertIn(("recover", "reconnect"), events)
+        self.assertEqual(len(events), len(widget.MENU_ACTIONS))
+
     def test_one_menu_drives_tray_and_widget(self):
         def flat(items):
             for entry in items:

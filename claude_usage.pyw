@@ -1866,13 +1866,14 @@ class UsageApp:
                     menu.add_command(**options)
                 else:
                     variable = tk.BooleanVar(master=menu, value=checked)
-                    menu.variables.append(variable)  # keep it alive while shown
+                    # Keep every variable alive while the menu is shown (submenus too).
+                    self._menu_variables.append(variable)
                     menu.add_checkbutton(variable=variable, **options)
 
     def _show_context_menu(self, x=None, y=None):
         """The same menu the notification-area icon shows."""
         menu = tk.Menu(self.root, tearoff=0)
-        menu.variables = []
+        self._menu_variables = []
         self._fill_tk_menu(menu, menu_spec(
             self.lang, self.mode, self.on_top, self.display,
         ))

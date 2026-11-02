@@ -14,6 +14,14 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - Pin GitHub Actions to verified commit SHAs and test settings replacement and
   replacement failures using temporary files.
 
+## [0.9.2] - 2026-11-02
+
+### Fixed
+- **위젯을 우클릭해도 메뉴가 뜨지 않던 문제(0.9.1)**: 메뉴를 하나로 합치면서 하위 메뉴
+  (표시 방식·언어·동기화 문제 해결)를 만들 때 오류가 나 메뉴 전체가 열리지 않았습니다.
+  그래서 `다시 로그인` 같은 복구 메뉴도 쓸 수 없었습니다. 위젯 메뉴를 실제로 열고 모든
+  항목을 눌러 보는 Windows 테스트를 추가했습니다.
+
 ## [0.9.1] - 2026-10-27
 
 ### Fixed
@@ -354,6 +362,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
+[0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
