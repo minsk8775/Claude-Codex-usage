@@ -153,6 +153,21 @@ WEB_FIXTURE_BLOCKS = [
 
 
 class CodexWebTests(unittest.TestCase):
+    def test_page_without_usage_reports_what_it_showed(self):
+        devtools = Mock()
+        page = {"url": "https://chatgpt.com/codex", "title": "Codex", "body": "Just a moment"}
+        with patch.object(web, "read_page", return_value=page), \
+                patch.object(web.usage, "PAGE_TIMEOUT", 0.05), patch.object(web.time, "sleep"), \
+                self.assertRaises(web.SyncError) as raised:
+            web.wait_for_usage(devtools)
+        self.assertIn("Just a moment", raised.exception.detail)
+        self.assertIn("chatgpt.com/codex", raised.exception.detail)
+
+    def test_hidden_reader_window_has_a_real_size(self):
+        flags = web.usage.browser_flags(1234, "profile", visible=False)
+        self.assertNotIn("--window-size=1,1", flags)
+        self.assertIn("--window-size=1280,900", flags)
+
     def test_codex_reuses_the_shared_sync_with_its_own_page(self):
         self.assertEqual(web.usage.PAGE_HOSTS, ("chatgpt.com", "openai.com"))
         with patch.object(web.usage, "sync_usage", return_value={"bars": []}) as shared:
@@ -548,6 +563,17 @@ class WidgetTests(unittest.TestCase):
             self.assertEqual(Path(fields[0]).resolve(), Path(sys.executable).resolve())
             self.assertTrue(fields[1].endswith("--watch"))
             self.assertEqual(Path(fields[2]), state)  # the Korean folder name survives
+
+    def test_language_change_drops_error_text_in_the_old_language(self):
+        app = self.app()
+        app.mode = "both_stacked"
+        app.start_sync = Mock()
+        app.datas = {"claude": {"bars": [{"pct": 5}]},
+                     "codex": {"code": "sync_failed", "error": "사용 한도를 읽지 못했습니다"}}
+        app._set_lang("en")
+        self.assertEqual(app.datas["codex"], {"error": "Syncing usage..."})
+        self.assertEqual(app.datas["claude"], {"bars": [{"pct": 5}]})   # numbers stay
+        app.start_sync.assert_called_once()
 
     def test_codex_app_is_recognised_and_claude_code_cli_is_not(self):
         rank = widget.app_rank

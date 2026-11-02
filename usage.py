@@ -480,12 +480,14 @@ def browser_flags(port, profile, visible):
         flags.extend(["--new-window", USAGE_URL])
     else:
         # Keep a normal (non-headless) browser for Claude's anti-bot checks, but
-        # place it off-screen as a second guard while Win32 keeps it hidden.
+        # place it off-screen as a second guard while Win32 keeps it hidden. It
+        # runs on a hidden desktop anyway, so give it a normal size: the ChatGPT
+        # usage page does not render its numbers in a 1x1 window.
         flags.extend(
             [
                 "--start-minimized",
                 "--window-position=-32000,-32000",
-                "--window-size=1,1",
+                "--window-size=1280,900",
                 "about:blank",
             ]
         )

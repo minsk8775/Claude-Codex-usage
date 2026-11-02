@@ -1228,6 +1228,8 @@ class UsageApp:
                     )
                     raise RuntimeError("%s reader failed" % key)
                 data = self._load_latest(source)
+                if data.get("detail"):
+                    log_error("%s: %s" % (key, data["detail"]))
                 if manual and data.get("code") == "needs_login":
                     run_script(script, "--connect", "--lang", lang)
                 self.events.put(("sync_result", (key, data)))
@@ -1307,6 +1309,13 @@ class UsageApp:
             return
         self.lang = lang
         self.tray.current_lang = lang
+        # A reader's error message is in the language it ran with; until the
+        # resync below replaces it, show "syncing" in the new language instead.
+        for key, data in self.datas.items():
+            if data.get("error"):
+                self.datas[key] = {"error": self._t("syncing")}
+        if not self._stacked():
+            self.data = self.datas.get(self._source()["key"], self.data)
         self._save_settings()
         self._draw()
         self._place()

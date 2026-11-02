@@ -236,9 +236,11 @@ def wait_for_usage(devtools):
                 or "continue with" in body or "이메일로 계속" in body):
             raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
         time.sleep(0.5)
-    if not last.get("blocks"):
-        raise SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
-    return last
+    error = SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
+    # What the page showed instead, for error.log (never cookies or tokens).
+    error.detail = "url=%s title=%s body=%s" % (
+        last.get("url"), last.get("title"), " ".join((last.get("body") or "").split())[:300])
+    raise error
 
 
 def refresh_usage(devtools):
@@ -298,7 +300,7 @@ def main():
             "Codex 사용량 연결 필요\n↻를 눌러 ChatGPT에 로그인하세요",
             "Codex usage needs ChatGPT sign-in\nPress ↻ to sign in")})
     except SyncError as error:
-        emit({"code": "sync_failed", "error": str(error)})
+        emit({"code": "sync_failed", "error": str(error), "detail": getattr(error, "detail", None)})
     except (OSError, ValueError) as error:
         emit({"code": "sync_failed", "detail": str(error), "error": usage.t(
             "Codex 사용량 읽기 실패", "Failed to read Codex usage")})
