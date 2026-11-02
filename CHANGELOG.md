@@ -11,8 +11,8 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   그래서 `다시 로그인` 같은 복구 메뉴도 쓸 수 없었습니다. 위젯 메뉴를 실제로 열고 모든
   항목을 눌러 보는 Windows 테스트를 추가했습니다.
 - 백그라운드 전용 브라우저 창을 1×1 대신 일반 크기(1280×900)로 띄웁니다(보이지 않는
-  데스크톱에서 돌아 화면에는 안 보임). 사용량을 못 읽으면 그때 열린 페이지의 주소·제목·
-  앞부분 글자를 `error.log`에 남깁니다.
+  데스크톱에서 돌아 화면에는 안 보임). 사용량을 못 읽으면 그때 열린 페이지의 주소와 제목을
+  `error.log`에 남깁니다.
 - **Codex 한도를 못 읽던 문제(주소 변경)**: ChatGPT 사용량 페이지가 `개요`/`사용량 분석`
   탭으로 나뉘면서, 리더가 열던 주소가 한도가 없는 `사용량 분석`(`?tab=analytics`)으로
   열렸습니다. 한도가 있는 `https://chatgpt.com/settings/usage?tab=overview`로 바로 엽니다.
@@ -20,6 +20,14 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - **언어를 바꿔도 오류 문구가 이전 언어로 남던 문제**: 오류 문구는 리더가 실행될 때의 언어로
   저장되는데, 다음 동기화가 끝날 때까지 그대로 보였습니다. 언어를 바꾸면 바로 새 언어의
   `동기화 중…`으로 바꿔 보여 줍니다.
+- **보안: 제거가 다른 파일이 든 폴더까지 지울 수 있던 문제**: 제거는 프로그램 폴더를 통째로
+  지우는데, 앱 파일을 `다운로드`처럼 다른 파일이 있는 곳에 바로 넣어 두면 그 폴더 전체가
+  지워질 수 있었습니다. 이제 폴더에 이 앱의 파일만 있을 때만 폴더째 지우고, 아니면 앱
+  파일만 지웁니다. 남은 프로세스를 닫을 때도 폴더 경로 대신 이 앱 스크립트의 전체 경로로
+  찾아, 다른 Python 프로그램을 닫지 않습니다.
+- **보안: 진단 기록에 페이지 글자가 남던 문제**: Codex를 못 읽었을 때 `error.log`에 페이지
+  앞부분 글자를 적었는데, 계정 이름이나 이메일이 들어갈 수 있었습니다. 페이지 주소와 제목만
+  남깁니다.
 - Save widget settings with the existing atomic JSON writer so an interrupted
   save keeps the previous complete settings file.
 - Correct the documented UDP commands to `show`, `autoshow`, and `exit`.

@@ -237,9 +237,9 @@ def wait_for_usage(devtools):
             raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
         time.sleep(0.5)
     error = SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
-    # What the page showed instead, for error.log (never cookies or tokens).
-    error.detail = "url=%s title=%s body=%s" % (
-        last.get("url"), last.get("title"), " ".join((last.get("body") or "").split())[:300])
+    # Which page it was on, for error.log. Only the address and title: the page
+    # text can contain the account's name or e-mail address.
+    error.detail = "url=%s title=%s" % (last.get("url"), last.get("title"))
     raise error
 
 

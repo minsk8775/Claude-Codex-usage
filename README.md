@@ -163,7 +163,8 @@ ZIP으로 설치했다면 `uninstall.cmd`로 지운 뒤 새 ZIP을 받아 `insta
 - 바탕화면·시작 프로그램 바로가기
 - 설정·캐시·로그 (`%LOCALAPPDATA%\ClaudeCodexUsage`)
 - 로그인 정보가 든 전용 브라우저 프로필 (`%LOCALAPPDATA%\ClaudePet`)
-- 프로그램 폴더 자체 (git 설치의 숨김 `.git` 포함)
+- 프로그램 폴더 자체 (git 설치의 숨김 `.git` 포함). 단, 그 폴더에 이 앱과 상관없는 파일이
+  있으면 폴더는 남기고 이 앱의 파일만 지웁니다.
 
 제거하는 동안 그 폴더를 열어 둔 cmd 창이나 탐색기 창이 있으면 폴더가 남을 수 있습니다.
 창을 닫고 폴더를 지우면 됩니다. Python과 uv는 다른 프로그램도 같이 쓰므로 남겨 둡니다.
@@ -379,7 +380,9 @@ cannot be undone. It removes:
 - the desktop and Startup shortcuts
 - settings, caches and logs (`%LOCALAPPDATA%\ClaudeCodexUsage`)
 - the dedicated browser profiles holding the sign-ins (`%LOCALAPPDATA%\ClaudePet`)
-- the program folder itself (including a git install's hidden `.git`)
+- the program folder itself (including a git install's hidden `.git`). If that
+  folder also holds files that are not this app's, only the app's files are
+  removed and the folder stays.
 
 A cmd or Explorer window left open inside the folder can keep it from being
 removed; close it and delete the folder. Python and uv are shared with other

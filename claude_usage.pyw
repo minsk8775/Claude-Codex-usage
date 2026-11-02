@@ -2112,6 +2112,31 @@ def run_watcher():
     return 0
 
 
+# What this app puts in its program folder (a git checkout or an unzipped
+# release), plus names older versions left there. Uninstall deletes the folder
+# itself only when it holds nothing else; otherwise it deletes just these, so a
+# copy dropped straight into e.g. Downloads never takes the user's files along.
+APP_FILES = (
+    ".git", ".github", ".gitignore", ".noupdate", "__pycache__", "assets", "tests",
+    "CHANGELOG.md", "LICENSE", "README.md", "SECURITY.md", "HISTORY.md",
+    "claude_usage.pyw", "usage.py", "codex_web.py", "codex_usage.py", "title_badges.py",
+    "install.py", "install.cmd", "uninstall.cmd", "cleanup-legacy.cmd",
+    "latest.json", "codex_latest.json", "error.log", "status.log",
+)
+READER_AND_APP_SCRIPTS = ("claude_usage.pyw", "usage.py", "codex_web.py", "title_badges.py")
+
+
+def program_targets():
+    """The program folder if it is the app's alone, else only the app's files in it."""
+    try:
+        names = {entry.name for entry in BASE_DIR.iterdir()}
+    except OSError:
+        return []
+    if names <= set(APP_FILES):
+        return [BASE_DIR]
+    return [BASE_DIR / name for name in APP_FILES if name in names]
+
+
 def schedule_self_delete(*targets):
     """Delete these folders (the program folder among them) once this process exits.
 
@@ -2129,6 +2154,10 @@ def schedule_self_delete(*targets):
     code = (
         "import os,shutil,stat,sys,time\n"
         "def rm(t):\n"
+        "    if not os.path.isdir(t):\n"
+        "        try: os.chmod(t,stat.S_IWRITE|stat.S_IREAD); os.remove(t)\n"
+        "        except OSError: pass\n"
+        "        return\n"
         "    for r,ds,fs in os.walk(t):\n"
         "        for n in ds+fs:\n"
         "            try: os.chmod(os.path.join(r,n),stat.S_IWRITE|stat.S_IREAD)\n"
@@ -2178,8 +2207,8 @@ def wait_for_exit(ports, timeout):
 def stop_leftover_processes():
     """Force-close anything of ours still running: the dedicated Chrome/Edge
     (its command line names our browser-data folder) and our Python helpers
-    (their command line names the program or data folder). The user's own
-    browser and other apps never carry these paths, so they are left alone."""
+    (their command line names one of our scripts by full path). The user's own
+    browser and other Python programs never carry these paths."""
     script = (
         "$p=$env:CCU_PATHS -split '\\|';"
         "$b=$env:CCU_BROWSER;"
@@ -2189,7 +2218,7 @@ def stop_leftover_processes():
         " if($_.Name -match '^pythonw?\\.exe$'){return [bool]($p | Where-Object { $c.IndexOf($_,[StringComparison]::OrdinalIgnoreCase) -ge 0 })};"
         " $false } | ForEach-Object { $_.ProcessId }"
     )
-    env = dict(os.environ, CCU_PATHS="%s|%s" % (BASE_DIR, STATE_DIR),
+    env = dict(os.environ, CCU_PATHS="|".join(str(BASE_DIR / name) for name in READER_AND_APP_SCRIPTS),
                CCU_BROWSER=str(BROWSER_DATA_DIR))
     try:
         found = subprocess.run(
@@ -2247,8 +2276,8 @@ def uninstall():
     root.withdraw()
     messagebox.showinfo("Claude Codex Usage", tr(lang, "uninstall_done"))
     root.destroy()
-    # Remove the program folder after we exit and release it.
-    schedule_self_delete(BASE_DIR, STATE_DIR, BROWSER_DATA_DIR)
+    # Remove the program files after we exit and release them.
+    schedule_self_delete(*program_targets(), STATE_DIR, BROWSER_DATA_DIR)
 
 
 def main():

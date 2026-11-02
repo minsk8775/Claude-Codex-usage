@@ -164,8 +164,8 @@ class CodexWebTests(unittest.TestCase):
                 patch.object(web.usage, "PAGE_TIMEOUT", 0.05), patch.object(web.time, "sleep"), \
                 self.assertRaises(web.SyncError) as raised:
             web.wait_for_usage(devtools)
-        self.assertIn("Just a moment", raised.exception.detail)
         self.assertIn("chatgpt.com/codex", raised.exception.detail)
+        self.assertNotIn("Just a moment", raised.exception.detail)  # page text may hold the e-mail
 
     def test_hidden_reader_window_has_a_real_size(self):
         flags = web.usage.browser_flags(1234, "profile", visible=False)
@@ -528,12 +528,42 @@ class WidgetTests(unittest.TestCase):
                                 stop_leftover_processes=Mock(), schedule_self_delete=Mock(),
                                 messagebox=Mock(), tk=Mock()):
                 widget.uninstall()
-                widget.schedule_self_delete.assert_called_once_with(program, state, browser)
+                widget.schedule_self_delete.assert_called_once_with(program, state, browser)  # app-only folder
                 self.assertIn("Uninstall complete", widget.messagebox.showinfo.call_args.args[1])
                 widget.stop_leftover_processes.assert_called_once()
             self.assertFalse(state.exists())
             self.assertFalse(browser.exists())
             self.assertFalse(any(link.exists() for link in links))
+
+    def test_uninstall_never_deletes_a_folder_shared_with_other_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            for name in ("claude_usage.pyw", "usage.py", "README.md"):
+                (folder / name).write_text("x")
+            (folder / "assets").mkdir()
+            with patch.object(widget, "BASE_DIR", folder):
+                self.assertEqual(widget.program_targets(), [folder])          # only ours: whole folder
+                (folder / "my report.docx").write_text("keep me")
+                targets = widget.program_targets()
+            self.assertNotIn(folder, targets)                                  # shared: just our files
+            self.assertEqual(sorted(t.name for t in targets),
+                             ["README.md", "assets", "claude_usage.pyw", "usage.py"])
+
+    def test_delete_helper_removes_files_and_folders_but_nothing_else(self):
+        import re
+        source = (REPO / "claude_usage.pyw").read_text(encoding="utf-8")
+        body = source[source.index("def schedule_self_delete"):]
+        code = eval("(" + re.search(r"    code = \(\n(.*?)\n    \)\n", body, re.S).group(1) + ")")
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            (folder / "assets").mkdir()
+            (folder / "assets" / "icon.ico").write_text("x")
+            (folder / "usage.py").write_text("x")
+            (folder / "my report.docx").write_text("keep me")
+            import subprocess as sp
+            sp.run([sys.executable, "-c", code, str(folder / "assets"), str(folder / "usage.py")],
+                   check=True, timeout=30)
+            self.assertEqual([p.name for p in folder.iterdir()], ["my report.docx"])
 
     def test_badges_only_view_mode_narrows_synced_apps(self):
         app = self.app()
