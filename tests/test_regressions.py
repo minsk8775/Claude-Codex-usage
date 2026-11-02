@@ -153,6 +153,14 @@ WEB_FIXTURE_BLOCKS = [
 
 
 class CodexWebTests(unittest.TestCase):
+    def test_reader_switches_to_the_overview_tab_for_the_limits(self):
+        devtools = Mock()
+        pages = [{"url": "https://chatgpt.com/codex/cloud/settings/analytics#usage", "body": "사용량 분석"},
+                 {"blocks": WEB_FIXTURE_BLOCKS}]
+        with patch.object(web, "read_page", side_effect=pages), patch.object(web.time, "sleep"):
+            self.assertEqual(web.wait_for_usage(devtools)["blocks"], WEB_FIXTURE_BLOCKS)
+        devtools.evaluate.assert_called_once_with(web.OVERVIEW_TAB_JS)
+
     def test_page_without_usage_reports_what_it_showed(self):
         devtools = Mock()
         page = {"url": "https://chatgpt.com/codex", "title": "Codex", "body": "Just a moment"}

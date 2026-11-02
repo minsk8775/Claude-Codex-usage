@@ -75,6 +75,20 @@ EXTRACT_JS = r"""
 })()
 """
 
+# The page has tabs; the limits live on "개요"/"Overview", but the analytics
+# URL can open on "사용량 분석"/"Usage analytics". Click the overview tab when
+# the limits are not on screen.
+OVERVIEW_TAB_JS = r"""
+(() => {
+  const want = /^(개요|overview)$/i;
+  const tab = Array.from(document.querySelectorAll('[role="tab"], button, a'))
+    .find(el => want.test((el.innerText || '').trim()));
+  if (!tab || tab.getAttribute('aria-selected') === 'true') return false;
+  tab.click();
+  return true;
+})()
+"""
+
 _PCT_ONLY = re.compile(r"^(\d+(?:\.\d+)?)\s*%$")
 _PCT_ANY = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 _LIMIT = re.compile(r"한도|limit", re.IGNORECASE)
@@ -235,6 +249,7 @@ def wait_for_usage(devtools):
                 or "log in" in body or "sign in" in body or "로그인" in body
                 or "continue with" in body or "이메일로 계속" in body):
             raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
+        devtools.evaluate(OVERVIEW_TAB_JS)  # wrong tab? switch to the limits
         time.sleep(0.5)
     error = SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
     # What the page showed instead, for error.log (never cookies or tokens).
