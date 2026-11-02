@@ -21,6 +21,8 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox
 
+from title_badges import level_color, rounded as rounded_rectangle  # same look as the badges
+
 from usage import atomic_json
 
 
@@ -96,10 +98,9 @@ SOURCE_BY_KEY = {source["key"]: source for source in SOURCES}
 READER_SCRIPTS = tuple(source["script"] for source in SOURCES)
 
 
-def bar_cap(key):
-    """Max bars a source may draw. The ChatGPT page can list more limits than
-    Claude's two (e.g. per-model ones), so Codex gets room for four."""
-    return 4 if key == "codex" else 2
+# Max bars a source may draw. The ChatGPT page can list more limits than
+# Claude's two (e.g. per-model ones), so Codex gets room for four.
+BAR_CAP = {"claude": 2, "codex": 4}
 
 # View modes, chosen from the notification-icon right-click menu:
 #   auto         - follow which apps are running: one open -> that one only,
@@ -142,7 +143,6 @@ LANGS = ("ko", "en")
 DEFAULT_LANG = "ko"
 STRINGS = {
     "syncing": {"ko": "사용량 동기화 중...", "en": "Syncing usage..."},
-    "syncing_official": {"ko": "공식 사용량 동기화 중...", "en": "Syncing official usage..."},
     "update_full": {"ko": "● 업데이트 필요", "en": "● Update available"},
     "update_short": {"ko": "● 업데이트", "en": "● Update"},
     "mode_auto": {"ko": "자동 (앱에 맞춰)", "en": "Auto (follow apps)"},
@@ -705,13 +705,6 @@ class TrayIcon:
             user32.DispatchMessageW(ctypes.byref(message))
         if self.icon:
             user32.DestroyIcon(self.icon)
-
-
-def rounded_rectangle(canvas, x1, y1, x2, y2, radius, **options):
-    points = [x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
-              x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
-              x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1]
-    return canvas.create_polygon(points, smooth=True, splinesteps=24, **options)
 
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -1506,7 +1499,7 @@ class UsageApp:
         )
 
     def _measure(self):
-        bars = (self.data.get("bars") or [])[:bar_cap(self._source()["key"])]
+        bars = (self.data.get("bars") or [])[:BAR_CAP[self._source()["key"]]]
         if bars and not self.data.get("error"):
             base_height = self.ROW_TOP + (len(bars) - 1) * self.ROW_STEP + self.ROW_BOTTOM
         else:
@@ -1597,7 +1590,7 @@ class UsageApp:
     def _draw_bar(self, pad, row_y, bar):
         """Draw one usage bar (label, percent, track/fill, reset text) at row_y."""
         pct = max(0.0, min(float(bar.get("pct", 0)), 100.0))
-        color = "#F1707B" if pct >= 90 else "#F5A85F" if pct >= 75 else "#2F7DFF"
+        color = level_color(pct)
         self.canvas.create_text(
             pad, row_y, text=str(bar.get("label", "")), anchor="w",
             fill="#FFFFFF", font=self._font(10, "bold"),
@@ -1693,7 +1686,7 @@ class UsageApp:
             self.canvas.create_text(
                 pad,
                 self._s(52),
-                text=str(self.data.get("error") or self._t("syncing_official")),
+                text=str(self.data.get("error") or self._t("syncing")),
                 anchor="w",
                 fill="#F1707B",
                 width=self.width - 2 * pad,
@@ -1712,7 +1705,7 @@ class UsageApp:
                 height += self.STACK_GAP
             height += self.STACK_SECTION
             data = self.datas.get(source["key"]) or {}
-            bars = (data.get("bars") or [])[:bar_cap(source["key"])]
+            bars = (data.get("bars") or [])[:BAR_CAP[source["key"]]]
             if bars and not data.get("error"):
                 height += self.STACK_BAR * len(bars)
             else:
@@ -1741,7 +1734,7 @@ class UsageApp:
             )
             row += self.STACK_SECTION
             data = self.datas.get(source["key"]) or {}
-            bars = (data.get("bars") or [])[:bar_cap(source["key"])]
+            bars = (data.get("bars") or [])[:BAR_CAP[source["key"]]]
             if bars and not data.get("error"):
                 for bar in bars:
                     self._draw_bar(pad, self._s(row + 10), bar)

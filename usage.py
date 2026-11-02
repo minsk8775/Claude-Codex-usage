@@ -31,7 +31,6 @@ import urllib.request
 from datetime import datetime, timezone
 
 
-DIR = os.path.dirname(os.path.abspath(__file__))
 USAGE_URL = "https://claude.ai/settings/usage"
 # Hosts whose open tab is reused as the usage page (codex_web.py overrides these).
 PAGE_HOSTS = ("claude.ai",)
@@ -152,9 +151,6 @@ class HiddenDesktopProcess:
 
     def terminate(self):
         ctypes.windll.kernel32.TerminateProcess(self._process_handle, 1)
-
-    def kill(self):
-        self.terminate()
 
     def wait(self, timeout=None):
         milliseconds = 0xFFFFFFFF if timeout is None else max(0, int(timeout * 1000))
@@ -1028,10 +1024,7 @@ def self_test():
                 process.terminate()
                 process.wait(timeout=5)
             except (OSError, subprocess.TimeoutExpired):
-                try:
-                    process.kill()
-                except OSError:
-                    pass
+                pass
     print("Claude usage reader self-test: OK")
 
 

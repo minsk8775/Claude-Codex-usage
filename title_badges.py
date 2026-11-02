@@ -88,22 +88,16 @@ def level_color(pct):
     return "#2F7DFF"
 
 
-def short_label(label, lang="ko", hint=""):
+def short_label(label, lang="ko"):
     """'현재 세션 · Spark' -> '세션·Spark', '모든 모델' -> '주간', etc."""
     text = str(label or "")
     head, _, tag = text.partition("·")
     low = head.lower()
-    hint = str(hint or "")
     if "세션" in head or "session" in low or "5시간" in head or "5-hour" in low or "5 hour" in low:
         base = tr(lang, "session")
     elif any(word in head for word in ("모든 모델", "주간")) or any(
             word in low for word in ("all models", "week")):
         base = tr(lang, "weekly")
-    elif _GENERIC.match(head) and ("주간" in hint or "week" in hint.lower()):
-        # The Codex page sometimes gives only "사용 한도"; its reset line names the window.
-        base = tr(lang, "weekly")
-    elif _GENERIC.match(head) and ("5시간" in hint or "5-hour" in hint.lower()):
-        base = tr(lang, "session")
     else:
         base = head.strip() or text.strip()
     tag = tag.strip()
@@ -130,7 +124,6 @@ def remaining_text(seconds, lang="ko"):
     return "%d분 후 초기화" % max(minutes, 1)
 
 
-_GENERIC = re.compile(r"^\s*((사용\s*)?한도|usage\s*limit|limit)?\s*$", re.IGNORECASE)
 _KO_REL = re.compile(r"((?:\d+\s*(?:일|시간|분)\s*)+)후")
 _KO_CLOCK = re.compile(r"(\(([월화수목금토일])(?:요일)?\)\s*)?(오전|오후)\s*(\d{1,2}:\d{2})")
 _EN_REL = re.compile(r"\bin\s+((?:\d+\s*[a-z]+\s*)+)", re.IGNORECASE)
@@ -220,7 +213,7 @@ def columns(data, lang="ko", now=None):
             pct = 0.0
         result.append({
             "warn": False,
-            "label": short_label(bar.get("label"), lang, bar.get("sub")),
+            "label": short_label(bar.get("label"), lang),
             "pct": pct,
             "pct_text": str(bar.get("pct_text") or "%g%%" % pct),
             "reset": short_reset(bar.get("sub"), lang, now),
@@ -564,7 +557,7 @@ def rounded(canvas, x1, y1, x2, y2, radius, **options):
     points = [x1 + radius, y1, x2 - radius, y1, x2, y1, x2, y1 + radius,
               x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
               x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1]
-    return canvas.create_polygon(points, smooth=True, **options)
+    return canvas.create_polygon(points, smooth=True, splinesteps=24, **options)
 
 
 class BadgeApp:

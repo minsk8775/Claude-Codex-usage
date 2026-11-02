@@ -64,8 +64,6 @@ class BadgeTests(unittest.TestCase):
         self.assertEqual(badges.short_label("주간 한도 · Spark"), "주간·Spark")
         self.assertEqual(badges.short_label("Current session", "en"), "Session")
         self.assertEqual(badges.short_label("5시간 한도"), "세션")
-        self.assertEqual(badges.short_label("한도", "ko", "주간 사용 한도 초기화"), "주간")
-        self.assertEqual(badges.short_label("한도", "ko", "1시간 후 초기화"), "한도")
 
     def test_columns_cover_login_errors_and_bars(self):
         self.assertEqual(badges.columns({"code": "needs_login", "error": "x"})[0]["label"], "로그인 필요")

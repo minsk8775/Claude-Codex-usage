@@ -196,14 +196,13 @@ def normalize_label(label):
 
 
 def make_payload(data):
-    en = LANG == "en"
     blocks = data.get("blocks") or []
     bars = []
     for block in blocks:
         parsed = parse_block(block)
         if parsed is None:
             continue
-        sub = usage.localize_reset(parsed["reset"], LANG) or ("from ChatGPT" if en else "ChatGPT 공식 페이지")
+        sub = usage.localize_reset(parsed["reset"], LANG)
         bars.append({
             "label": normalize_label(parsed["label"]),
             "pct": parsed["used"],
