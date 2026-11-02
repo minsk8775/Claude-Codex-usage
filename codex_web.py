@@ -23,8 +23,14 @@ from datetime import datetime, timezone
 
 import usage  # reuse the browser/CDP plumbing
 
-# The official Codex/Work usage analytics page (confirmed via probe).
-CODEX_USAGE_URL = "https://chatgpt.com/codex/cloud/settings/analytics#usage"
+# Pages that have shown the Codex/Work limits, tried in order: the analytics
+# page (confirmed via probe in 0.8.0; now tabbed, see OVERVIEW_TAB_JS) and the
+# Codex settings usage page the widget opens for the website.
+CODEX_USAGE_URLS = (
+    "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+    "https://chatgpt.com/codex/settings/usage",
+)
+CODEX_USAGE_URL = CODEX_USAGE_URLS[0]
 # Runtime cache under LOCALAPPDATA (shared with the widget), not the program
 # folder, so it works even in a read-only or OneDrive-synced install location.
 CODEX_LATEST = os.path.join(usage.CACHE_DIR, "codex_latest.json")
@@ -260,10 +266,20 @@ def wait_for_usage(devtools):
 
 def refresh_usage(devtools):
     devtools.call("Page.enable")
-    current = read_page(devtools)
-    if not current.get("blocks"):
-        devtools.call("Page.navigate", {"url": CODEX_USAGE_URL})
-    return wait_for_usage(devtools)
+    if read_page(devtools).get("blocks"):
+        return wait_for_usage(devtools)
+    details = []
+    for url in CODEX_USAGE_URLS:
+        devtools.call("Page.navigate", {"url": url})
+        try:
+            return wait_for_usage(devtools)
+        except NeedsLogin:
+            raise
+        except SyncError as error:
+            details.append(getattr(error, "detail", "") or str(error))
+            last_error = error
+    last_error.detail = " | ".join(details)
+    raise last_error
 
 
 def sync_usage():

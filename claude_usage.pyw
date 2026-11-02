@@ -1221,7 +1221,9 @@ class UsageApp:
             key = source["key"]
             try:
                 script = source["script"]
-                result = run_script(script, "--sync", "--lang", lang)
+                # A reader may start its browser and try a couple of pages before
+                # giving up; let it finish so it can report what it saw.
+                result = run_script(script, "--sync", "--lang", lang, timeout=150)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)

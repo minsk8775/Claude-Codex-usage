@@ -161,6 +161,19 @@ class CodexWebTests(unittest.TestCase):
             self.assertEqual(web.wait_for_usage(devtools)["blocks"], WEB_FIXTURE_BLOCKS)
         devtools.evaluate.assert_called_once_with(web.OVERVIEW_TAB_JS)
 
+    def test_reader_tries_each_codex_page_and_reports_all(self):
+        devtools = Mock()
+        devtools.evaluate.return_value = False
+        empty = {"url": "https://chatgpt.com/x", "title": "t", "body": "no limits here"}
+        with patch.object(web, "read_page", return_value=empty), \
+                patch.object(web.usage, "PAGE_TIMEOUT", 0.05), patch.object(web.time, "sleep"), \
+                self.assertRaises(web.SyncError) as raised:
+            web.refresh_usage(devtools)
+        navigated = [call.args[1]["url"] for call in devtools.call.call_args_list
+                     if call.args[0] == "Page.navigate"]
+        self.assertEqual(navigated, list(web.CODEX_USAGE_URLS))
+        self.assertEqual(raised.exception.detail.count("no limits here"), 2)
+
     def test_page_without_usage_reports_what_it_showed(self):
         devtools = Mock()
         page = {"url": "https://chatgpt.com/codex", "title": "Codex", "body": "Just a moment"}
