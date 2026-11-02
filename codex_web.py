@@ -23,14 +23,9 @@ from datetime import datetime, timezone
 
 import usage  # reuse the browser/CDP plumbing
 
-# Pages that have shown the Codex/Work limits, tried in order: the analytics
-# page (confirmed via probe in 0.8.0; now tabbed, see OVERVIEW_TAB_JS) and the
-# Codex settings usage page the widget opens for the website.
-CODEX_USAGE_URLS = (
-    "https://chatgpt.com/codex/cloud/settings/analytics#usage",
-    "https://chatgpt.com/codex/settings/usage",
-)
-CODEX_USAGE_URL = CODEX_USAGE_URLS[0]
+# The usage page's Overview tab, where the Codex/Work limits are shown. The
+# older analytics URL now redirects to the "?tab=analytics" tab, which has none.
+CODEX_USAGE_URL = "https://chatgpt.com/settings/usage?tab=overview"
 # Runtime cache under LOCALAPPDATA (shared with the widget), not the program
 # folder, so it works even in a read-only or OneDrive-synced install location.
 CODEX_LATEST = os.path.join(usage.CACHE_DIR, "codex_latest.json")
@@ -78,20 +73,6 @@ EXTRACT_JS = r"""
     body: (document.body ? document.body.innerText : '').slice(0, 1500),
     blocks: blocks
   };
-})()
-"""
-
-# The page has tabs; the limits live on "개요"/"Overview", but the analytics
-# URL can open on "사용량 분석"/"Usage analytics". Click the overview tab when
-# the limits are not on screen.
-OVERVIEW_TAB_JS = r"""
-(() => {
-  const want = /^(개요|overview)$/i;
-  const tab = Array.from(document.querySelectorAll('[role="tab"], button, a'))
-    .find(el => want.test((el.innerText || '').trim()));
-  if (!tab || tab.getAttribute('aria-selected') === 'true') return false;
-  tab.click();
-  return true;
 })()
 """
 
@@ -255,7 +236,6 @@ def wait_for_usage(devtools):
                 or "log in" in body or "sign in" in body or "로그인" in body
                 or "continue with" in body or "이메일로 계속" in body):
             raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
-        devtools.evaluate(OVERVIEW_TAB_JS)  # wrong tab? switch to the limits
         time.sleep(0.5)
     error = SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
     # What the page showed instead, for error.log (never cookies or tokens).
@@ -266,20 +246,9 @@ def wait_for_usage(devtools):
 
 def refresh_usage(devtools):
     devtools.call("Page.enable")
-    if read_page(devtools).get("blocks"):
-        return wait_for_usage(devtools)
-    details = []
-    for url in CODEX_USAGE_URLS:
-        devtools.call("Page.navigate", {"url": url})
-        try:
-            return wait_for_usage(devtools)
-        except NeedsLogin:
-            raise
-        except SyncError as error:
-            details.append(getattr(error, "detail", "") or str(error))
-            last_error = error
-    last_error.detail = " | ".join(details)
-    raise last_error
+    if not read_page(devtools).get("blocks"):
+        devtools.call("Page.navigate", {"url": CODEX_USAGE_URL})
+    return wait_for_usage(devtools)
 
 
 def sync_usage():

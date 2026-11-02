@@ -71,7 +71,7 @@ CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "aut
 CLAUDE_AUMID = "Claude_pzs8sxrjxfjjc!Claude"
 CHATGPT_AUMID = "OpenAI.Codex_2p2nqsd0c76g0!App"
 CLAUDE_SITE = "https://claude.ai/new"
-CODEX_SITE = "https://chatgpt.com/codex/settings/usage"
+CODEX_SITE = "https://chatgpt.com/settings/usage?tab=overview"
 # Opened in the browser when the user clicks the "update needed" badge.
 REPO_URL = "https://github.com/minsk8775/claude-codex-usage"
 # The widget shows one page per source and flips between them with the on-screen
@@ -1221,9 +1221,7 @@ class UsageApp:
             key = source["key"]
             try:
                 script = source["script"]
-                # A reader may start its browser and try a couple of pages before
-                # giving up; let it finish so it can report what it saw.
-                result = run_script(script, "--sync", "--lang", lang, timeout=150)
+                result = run_script(script, "--sync", "--lang", lang)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)

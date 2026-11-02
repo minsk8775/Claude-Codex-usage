@@ -3,17 +3,6 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
-## [0.9.2] - 2026-10-28
-
-### Fixed
-- Save widget settings with the existing atomic JSON writer so an interrupted
-  save keeps the previous complete settings file.
-- Correct the documented UDP commands to `show`, `autoshow`, and `exit`.
-
-### Changed
-- Pin GitHub Actions to verified commit SHAs and test settings replacement and
-  replacement failures using temporary files.
-
 ## [0.9.2] - 2026-11-02
 
 ### Fixed
@@ -21,19 +10,23 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   (표시 방식·언어·동기화 문제 해결)를 만들 때 오류가 나 메뉴 전체가 열리지 않았습니다.
   그래서 `다시 로그인` 같은 복구 메뉴도 쓸 수 없었습니다. 위젯 메뉴를 실제로 열고 모든
   항목을 눌러 보는 Windows 테스트를 추가했습니다.
-- **Codex가 로그인 직후 한 번만 읽히고 그 뒤로 `사용 한도를 읽지 못했습니다`가 뜨던 문제**:
-  백그라운드 전용 브라우저 창이 1×1 크기라 ChatGPT 사용량 페이지가 숫자를 그리지 않았습니다.
-  보이지 않는 데스크톱에서 도는 창이라 일반 크기(1280×900)로 띄웁니다. 그래도 못 읽으면
-  그때 열린 페이지 주소·제목·앞부분 글자를 `error.log`에 남겨 원인을 바로 알 수 있습니다.
-- **ChatGPT 사용량 페이지가 `사용량 분석` 탭으로 열려 한도를 못 읽던 문제**: 페이지가
-  `개요`/`사용량 분석` 탭으로 나뉘면서 한도는 `개요`에만 나옵니다. 한도가 안 보이면 리더가
-  `개요`(Overview) 탭을 직접 눌러 읽습니다.
-  그래도 없으면 다른 Codex 사용량 주소(`chatgpt.com/codex/settings/usage`)도 열어 봅니다.
-- **Codex 리더가 60초 제한에 걸려 강제 종료되던 문제**: 브라우저를 띄우고 페이지를 몇 번
-  확인하다 보면 60초를 넘겨, 결과도 원인 기록도 남기지 못하고 끊겼습니다. 리더에 150초를 줍니다.
+- 백그라운드 전용 브라우저 창을 1×1 대신 일반 크기(1280×900)로 띄웁니다(보이지 않는
+  데스크톱에서 돌아 화면에는 안 보임). 사용량을 못 읽으면 그때 열린 페이지의 주소·제목·
+  앞부분 글자를 `error.log`에 남깁니다.
+- **Codex 한도를 못 읽던 문제(주소 변경)**: ChatGPT 사용량 페이지가 `개요`/`사용량 분석`
+  탭으로 나뉘면서, 리더가 열던 주소가 한도가 없는 `사용량 분석`(`?tab=analytics`)으로
+  열렸습니다. 한도가 있는 `https://chatgpt.com/settings/usage?tab=overview`로 바로 엽니다.
+  위젯에서 Codex 웹사이트를 열 때도 이 주소를 씁니다.
 - **언어를 바꿔도 오류 문구가 이전 언어로 남던 문제**: 오류 문구는 리더가 실행될 때의 언어로
   저장되는데, 다음 동기화가 끝날 때까지 그대로 보였습니다. 언어를 바꾸면 바로 새 언어의
   `동기화 중…`으로 바꿔 보여 줍니다.
+- Save widget settings with the existing atomic JSON writer so an interrupted
+  save keeps the previous complete settings file.
+- Correct the documented UDP commands to `show`, `autoshow`, and `exit`.
+
+### Changed
+- Pin GitHub Actions to verified commit SHAs and test settings replacement and
+  replacement failures using temporary files.
 
 ## [0.9.1] - 2026-10-27
 
@@ -375,7 +368,6 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
 
-[0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases
