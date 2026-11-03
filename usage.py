@@ -416,6 +416,46 @@ def stop_owned_browser(state):
         api.CloseHandle(handle)
 
 
+def profile_browser_pids(listing, profile):
+    """Main-process PIDs in a "pid<TAB>command line" listing whose browser runs
+    with exactly this --user-data-dir (renderer/helper processes are skipped;
+    closing the main one with its tree closes them)."""
+    pattern = re.compile(r'--user-data-dir="?%s"?(?=\s|$)' % re.escape(profile), re.IGNORECASE)
+    pids = []
+    for line in listing.splitlines():
+        pid, _, command = line.partition("\t")
+        if pid.strip().isdigit() and "--type=" not in command and pattern.search(command):
+            pids.append(int(pid))
+    return pids
+
+
+def stop_profile_browsers():
+    """Close any browser still holding our profile, even one the saved state no
+    longer knows about. A leftover one makes every new launch hand off to it
+    and exit at once ("could not start the usage browser"), and a visible
+    sign-in window would open inside the hidden one."""
+    if os.name != "nt":
+        return
+    script = ("[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
+              "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe' OR Name='msedge.exe'\" |"
+              " ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }")
+    no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        listing = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=30,
+            creationflags=no_window,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    pids = profile_browser_pids(listing, PROFILE)
+    for pid in pids:
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                       capture_output=True, creationflags=no_window)
+    if pids:
+        time.sleep(1.0)  # let it release the profile
+
+
 def hide_browser_windows(pid):
     """Hide top-level windows owned by the dedicated browser on Windows."""
     if os.name != "nt" or not pid:
@@ -493,6 +533,7 @@ def browser_flags(port, profile, visible):
 def launch_browser(visible):
     os.makedirs(APP_DATA, exist_ok=True)
     os.makedirs(PROFILE, exist_ok=True)
+    stop_profile_browsers()
     browser = find_browser()
     port = free_port()
     arguments = [browser] + browser_flags(port, PROFILE, visible)
@@ -545,8 +586,7 @@ def connect_browser():
         if state.get("mode") == "visible":
             open_page(state["port"], USAGE_URL)
             return state
-        if not stop_owned_browser(state):
-            raise SyncError(t("다시 로그인하기 전에 이전 전용 브라우저를 닫아 주세요", "Close the old dedicated usage browser before signing in again"))
+        stop_owned_browser(state)  # launch_browser closes it anyway if this cannot
         time.sleep(0.8)
     return launch_browser(visible=True)
 
@@ -966,6 +1006,7 @@ def sync_usage(read=read_usage):
 
 def close_browser():
     stop_owned_browser(load_state())
+    stop_profile_browsers()
 
 
 def self_test():

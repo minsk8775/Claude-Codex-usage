@@ -150,6 +150,20 @@ WEB_FIXTURE_BLOCKS = [
 ]
 
 
+class LeftoverBrowserTests(unittest.TestCase):
+    def test_only_our_profiles_main_browser_is_picked(self):
+        profile = r"C:\Users\민성\AppData\Local\ClaudePet\BrowserProfile"
+        listing = "\n".join([
+            '101\t"C:\\chrome.exe" --remote-debugging-port=5 --user-data-dir=%s --no-first-run' % profile,
+            '102\t"C:\\chrome.exe" --type=renderer --user-data-dir=%s' % profile,
+            '103\t"C:\\chrome.exe" --user-data-dir="%s" about:blank' % profile,
+            '104\t"C:\\chrome.exe" --user-data-dir=%sX' % profile,                       # longer name
+            '105\t"C:\\chrome.exe" --user-data-dir=%s' % profile.replace("BrowserProfile", "CodexBrowserProfile"),
+            '106\t"C:\\chrome.exe"',                                                   # the user's own Chrome
+        ])
+        self.assertEqual(claude.profile_browser_pids(listing, profile), [101, 103])
+
+
 class CodexWebTests(unittest.TestCase):
     def test_reader_opens_the_overview_tab_of_the_usage_page(self):
         devtools = Mock()
