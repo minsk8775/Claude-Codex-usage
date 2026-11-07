@@ -164,6 +164,35 @@ class LeftoverBrowserTests(unittest.TestCase):
         self.assertEqual(claude.profile_browser_pids(listing, profile), [101, 103])
 
 
+class BrowserLaunchTests(unittest.TestCase):
+    def test_leftover_browser_scan_runs_only_after_a_failed_launch(self):
+        with patch.object(claude, "start_browser", return_value={"pid": 1}), \
+                patch.object(claude, "stop_profile_browsers") as stop, patch.object(claude.os, "makedirs"):
+            claude.launch_browser(False)
+        stop.assert_not_called()  # the slow PowerShell scan stays off the normal path
+        with patch.object(claude, "start_browser", side_effect=[claude.SyncError("x"), {"pid": 2}]) as start, \
+                patch.object(claude, "stop_profile_browsers") as stop, patch.object(claude.os, "makedirs"):
+            self.assertEqual(claude.launch_browser(False), {"pid": 2})
+        stop.assert_called_once()
+        self.assertEqual(start.call_count, 2)
+
+
+class BadgeCommandTests(unittest.TestCase):
+    def test_widget_menu_can_reset_every_badge_position(self):
+        lock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.addCleanup(lock.close)
+        lock.bind(("127.0.0.1", 0))
+        lock.setblocking(False)
+        app = Mock(lock=lock, positions={"claude": (1, 2), "codex": (3, 4)})
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.sendto(b"reset", lock.getsockname())
+        import time
+        time.sleep(0.05)
+        badges.BadgeApp.read_commands(app)
+        self.assertEqual(app.positions, {})
+        app.save_positions.assert_called_once()
+
+
 class CodexWebTests(unittest.TestCase):
     def test_reader_opens_the_overview_tab_of_the_usage_page(self):
         devtools = Mock()
@@ -348,7 +377,44 @@ class WidgetTests(unittest.TestCase):
         app._draw = Mock()
         app._place = Mock()
         app.events = queue.Queue()
+        app.quick_retries = 0
         return app
+
+    def test_failed_reader_is_retried_soon_but_not_forever(self):
+        # A cold first start (right after sign-in) can miss; don't leave that
+        # app's usage empty until the 2-minute sync.
+        app = self.app()
+        app.root = Mock()
+        for _ in range(3):
+            app.syncing = True
+            app.events.put(("sync_done", ["codex"]))
+            app._poll_events()
+        self.assertEqual([c.args[0] for c in app.root.after.call_args_list].count(20000), 2)
+        app.events.put(("sync_done", []))
+        app._poll_events()
+        self.assertEqual(app.quick_retries, 0)
+
+    def test_sync_worker_reports_failed_readers(self):
+        app = self.app()
+        app._load_latest = Mock(side_effect=[{"bars": []}, {"code": "sync_failed", "error": "x"}])
+        with patch.object(widget, "run_script", return_value=Mock(returncode=0, stderr="")):
+            app._sync_worker([widget.SOURCE_BY_KEY["claude"], widget.SOURCE_BY_KEY["codex"]], False, "en")
+        self.assertEqual(list(app.events.queue)[-1], ("sync_done", ["codex"]))
+
+    def test_badge_right_click_opens_the_widget_menu(self):
+        app = self.app()
+        app.control_socket = Mock()
+        app.control_socket.recvfrom.side_effect = [(b"menu", ("127.0.0.1", 1)), OSError("closed")]
+        app._listen()
+        app._poll_events()
+        app.tray.popup.assert_called_once()
+        items = [e for e in widget.menu_spec("ko", "auto", True, "badges") if e]
+        self.assertIn(widget.RESET_BADGES_ID, [e[1] for e in items])
+        self.assertNotIn(widget.RESET_BADGES_ID, [e[1] for e in widget.menu_spec("ko", "auto", True, "widget") if e])
+        with patch.object(widget, "send_control") as send:
+            app.events.put(widget.MENU_ACTIONS[widget.RESET_BADGES_ID])
+            app._poll_events()
+        send.assert_called_once_with(widget.BADGE_PORT, "reset")
 
     def test_settings_replace_only_after_complete_json_is_written(self):
         app = self.app()

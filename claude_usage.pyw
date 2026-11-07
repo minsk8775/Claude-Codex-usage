@@ -60,11 +60,13 @@ DESKTOP_LINK = DESKTOP / "Claude Codex Usage.lnk"
 STARTUP_LINK = STARTUP / "Claude Codex Usage Watcher.lnk"
 MAIN_PORT = 47671
 WATCH_PORT = 47672
+BADGE_PORT = 47673  # title_badges.py's helper ("reset": badge positions)
 CREATE_NO_WINDOW = 0x08000000
 UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_web.py", "title_badges.py", "install.py", "install.cmd")
 # What other processes may ask over UDP: "show" (desktop shortcut, a badge),
-# "autoshow" (the watcher noticing an app launch) and "exit" (uninstall).
-CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "exit")}
+# "autoshow" (the watcher noticing an app launch), "menu" (a right-clicked
+# badge: show the full menu) and "exit" (uninstall).
+CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "exit", "menu")}
 
 # The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
 # a protected WindowsApps folder, so they cannot be launched by their exe path.
@@ -126,6 +128,7 @@ FIX_RETRY_ID = 1006
 FIX_RECONNECT_ID = 1007
 FIX_RESTART_ID = 1008
 RESET_POS_ID = 1009
+RESET_BADGES_ID = 1010
 # How usage is displayed: the floating widget, badges on the app title bars, or both.
 DISPLAY_MODES = ("widget", "badges", "both")
 DEFAULT_DISPLAY = "both"
@@ -161,6 +164,7 @@ STRINGS = {
     "fix_reconnect": {"ko": "다시 로그인 (브라우저 창)", "en": "Re-sign in (browser)"},
     "fix_restart": {"ko": "리더 브라우저 재시작", "en": "Restart reader browser"},
     "reset_position": {"ko": "위치 초기화 (시계 위로)", "en": "Reset position"},
+    "reset_badges": {"ko": "배지 위치 초기화", "en": "Reset badge positions"},
     "uninstall": {"ko": "제거 (Uninstall)", "en": "Uninstall"},
     "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
     "uninstall_confirm": {
@@ -201,6 +205,7 @@ MENU_ACTIONS = {
     LANG_KO_ID: ("lang", "ko"),
     LANG_EN_ID: ("lang", "en"),
     RESET_POS_ID: ("reset_position", None),
+    RESET_BADGES_ID: ("reset_badges", None),
     UNINSTALL_ID: ("uninstall", None),
     FIX_RETRY_ID: ("recover", "retry"),
     FIX_RESTART_ID: ("recover", "restart"),
@@ -237,6 +242,7 @@ def menu_spec(lang, mode, on_top, display):
           item("cmd", FIX_RECONNECT_ID, "fix_reconnect")]),
         None,
         item("cmd", RESET_POS_ID, "reset_position", enabled=widget),
+        *([item("cmd", RESET_BADGES_ID, "reset_badges")] if display != "widget" else []),
         None,
         item("cmd", UNINSTALL_ID, "uninstall"),
         None,
@@ -455,6 +461,7 @@ class POINT(ctypes.Structure):
 class TrayIcon:
     WM_APP = 0x8000
     WM_TRAY = WM_APP + 1
+    WM_POPUP = WM_APP + 2  # posted by popup(): show the menu at the cursor
     WM_CLOSE = 0x0010
     WM_DESTROY = 0x0002
     WM_LBUTTONUP = 0x0202
@@ -494,6 +501,11 @@ class TrayIcon:
 
     def start(self):
         self.thread.start()
+
+    def popup(self):
+        """Show the menu at the cursor from any thread (a badge was right-clicked)."""
+        if self.hwnd:
+            ctypes.windll.user32.PostMessageW(self.hwnd, self.WM_POPUP, 0, 0)
 
     def stop(self):
         if self.hwnd:
@@ -643,6 +655,9 @@ class TrayIcon:
                     self.events.put(("toggle", None))
                 elif mouse_message == self.WM_RBUTTONUP:
                     self._show_menu()
+                return 0
+            if message == self.WM_POPUP:
+                self._show_menu()
                 return 0
             if message == taskbar_created:
                 self._add_icon()
@@ -946,6 +961,7 @@ class UsageApp:
         self.badge_process = None
         self.app_ids = set()  # installed app AUMIDs; filled in the background
         self.auto_view = "both_stacked"  # effective view when mode == "auto"
+        self.quick_retries = 0
         self._known_app_keys = set()
         self.root = tk.Tk()
         self.root.withdraw()
@@ -1150,6 +1166,10 @@ class UsageApp:
                 self._set_display(payload)
             elif action == "reset_position":
                 self._reset_position()
+            elif action == "reset_badges":
+                send_control(BADGE_PORT, "reset")
+            elif action == "menu":
+                self.tray.popup()
             elif action == "uninstall":
                 self._uninstall()
             elif action == "recover":
@@ -1165,6 +1185,14 @@ class UsageApp:
                 self._place()
             elif action == "sync_done":
                 self.syncing = False
+                # A failed reader (often the first, cold browser start right
+                # after sign-in) is retried soon instead of at the next
+                # 2-minute sync, a couple of times in a row at most.
+                if payload and self.quick_retries < 2:
+                    self.quick_retries += 1
+                    self.root.after(20000, lambda: self.start_sync(False))
+                elif not payload:
+                    self.quick_retries = 0
                 self._draw()
                 self._place()
                 if self.pending_sync is not None:
@@ -1208,6 +1236,7 @@ class UsageApp:
         # Refresh every source currently on screen, one at a time. In stacked
         # mode that is both; otherwise just the visible one, so viewing Codex
         # never launches Claude's browser sync.
+        failed = []
         for source in sources:
             if self.exiting:
                 break
@@ -1225,13 +1254,16 @@ class UsageApp:
                     log_error("%s: %s" % (key, data["detail"]))
                 if manual and data.get("code") == "needs_login":
                     run_script(script, "--connect", "--lang", lang)
+                if data.get("code") == "sync_failed":
+                    failed.append(key)
                 self.events.put(("sync_result", (key, data)))
             except Exception as error:
+                failed.append(key)
                 log_error(repr(error))
                 self.events.put(
                     ("sync_result", (key, {"error": tr(lang, "update_failed")}))
                 )
-        self.events.put(("sync_done", None))
+        self.events.put(("sync_done", failed))
 
     def _effective_mode(self):
         """The concrete view in effect. In auto mode it follows running apps."""

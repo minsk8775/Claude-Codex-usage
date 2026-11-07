@@ -533,7 +533,17 @@ def browser_flags(port, profile, visible):
 def launch_browser(visible):
     os.makedirs(APP_DATA, exist_ok=True)
     os.makedirs(PROFILE, exist_ok=True)
-    stop_profile_browsers()
+    try:
+        return start_browser(visible)
+    except SyncError:
+        # A leftover browser still holding our profile makes the new one hand
+        # off to it and exit at once. Looking for it is slow (seconds, longer
+        # right after sign-in), so only do it when a launch has failed.
+        stop_profile_browsers()
+        return start_browser(visible)
+
+
+def start_browser(visible):
     browser = find_browser()
     port = free_port()
     arguments = [browser] + browser_flags(port, PROFILE, visible)

@@ -66,8 +66,6 @@ STRINGS = {
     "syncing": {"ko": "동기화 중…", "en": "Syncing…"},
     "login": {"ko": "로그인 필요", "en": "Sign-in needed"},
     "failed": {"ko": "동기화 실패", "en": "Sync failed"},
-    "reset_pos": {"ko": "배지 위치 초기화", "en": "Reset badge position"},
-    "open_widget": {"ko": "위젯 열기", "en": "Open widget"},
 }
 
 
@@ -536,21 +534,12 @@ class Badge:
             self.app.save_positions()
         self.drag = None
 
-    def on_menu(self, event):
-        import tkinter as tk
-
-        menu = tk.Menu(self.win, tearoff=0)
-        if self.app.widget_allowed:
-            menu.add_command(label=tr(self.app.lang, "open_widget"), command=self.app.open_widget)
-        menu.add_command(label=tr(self.app.lang, "reset_pos"), command=self.reset_position)
-        try:
-            menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            menu.grab_release()
-
-    def reset_position(self):
-        self.app.positions.pop(self.key, None)
-        self.app.save_positions()
+    def on_menu(self, _event):
+        # The widget's own menu (the one its notification icon shows), so every
+        # setting is reachable from the badges too. This click made us the
+        # foreground app; let the widget take over so its menu closes normally.
+        ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
+        self.app.send_widget(b"menu")
 
 
 def rounded(canvas, x1, y1, x2, y2, radius, **options):
@@ -561,10 +550,13 @@ def rounded(canvas, x1, y1, x2, y2, radius, **options):
 
 
 class BadgeApp:
-    def __init__(self, parent_pid):
+    def __init__(self, parent_pid, lock=None):
         import tkinter as tk
 
         self.parent_pid = parent_pid
+        self.lock = lock  # the single-instance socket, also our command port
+        if lock is not None:
+            lock.setblocking(False)
         self.win = Windows()
         self.root = tk.Tk()
         self.root.withdraw()
@@ -592,13 +584,27 @@ class BadgeApp:
             pass
 
     def open_widget(self):
-        if not self.widget_allowed:
-            return  # badges-only mode: the widget stays hidden
+        if self.widget_allowed:  # badges-only mode: the widget stays hidden
+            self.send_widget(b"show")
+
+    @staticmethod
+    def send_widget(message):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
-                client.sendto(b"show", ("127.0.0.1", MAIN_PORT))
+                client.sendto(message, ("127.0.0.1", MAIN_PORT))
         except OSError:
             pass
+
+    def read_commands(self):
+        """The widget's menu sends "reset" here to put every badge back."""
+        while self.lock is not None:
+            try:
+                message, _ = self.lock.recvfrom(64)
+            except OSError:  # nothing waiting (or an oversized datagram)
+                return
+            if message == b"reset":
+                self.positions.clear()
+                self.save_positions()
 
     def housekeeping(self):
         """Every few seconds: follow the widget's language/setting, quit with it."""
@@ -621,6 +627,7 @@ class BadgeApp:
             if not self.housekeeping():
                 self.root.destroy()
                 return
+        self.read_commands()
         for badge in self.badges:
             if badge.key not in self.shown_keys:
                 if badge.win.state() != "withdrawn":
@@ -665,7 +672,7 @@ def main():
     if lock is None:
         return 0
     try:
-        BadgeApp(args.parent).run()
+        BadgeApp(args.parent, lock).run()
     finally:
         lock.close()
     return 0
