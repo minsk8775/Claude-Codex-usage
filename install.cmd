@@ -29,7 +29,15 @@ rem A Python installed earlier but not on PATH (e.g. just installed).
 call :find_python
 if defined CLAUDE_USAGE_PY goto run_python
 
-echo Python was not found. Installing Python 3.12 for this user...
+rem A Python that runs but lacks Tk cannot show the widget; say so before
+rem installing a separate one.
+python -c "import sys" >nul 2>nul
+if errorlevel 1 py -c "import sys" >nul 2>nul
+if not errorlevel 1 (
+  echo Python is installed but without tkinter ^(Tcl/Tk^), which this app needs.
+  echo To use it instead, re-run its installer, choose Modify and tick "tcl/tk and IDLE".
+)
+echo Installing Python 3.12 with tkinter for this user...
 where winget.exe >nul 2>nul
 if not errorlevel 1 (
   winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements
@@ -65,7 +73,8 @@ exit /b
 rem Sets CLAUDE_USAGE_PY to an installed python.exe that has Tk, if any.
 :find_python
 set "CLAUDE_USAGE_PY="
-for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*" "%ProgramFiles%\Python3*") do (
+rem Classic python.org installs, and the Python install manager's runtimes.
+for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*" "%ProgramFiles%\Python3*" "%LOCALAPPDATA%\Python\pythoncore-3*") do (
   if exist "%%~D\python.exe" (
     "%%~D\python.exe" -c "import tkinter" >nul 2>nul
     if not errorlevel 1 set "CLAUDE_USAGE_PY=%%~D\python.exe"
