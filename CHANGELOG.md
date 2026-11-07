@@ -9,9 +9,10 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 - **배지를 우클릭하면 위젯·알림 아이콘과 같은 전체 메뉴가 뜹니다**: 배지만 표시할 때도 보기
   방식, 표시 방식, 언어, 동기화 문제 해결, 제거, 종료를 배지에서 바로 고릅니다.
   `배지 위치 초기화`는 이 메뉴에 들어 있습니다(배지를 쓸 때만 보임).
-- **Python이 없어도 설치됩니다**: uv도 Python도 없으면 `install.cmd`가 `winget`으로
-  Python 3.12를 이 사용자 계정에 설치하고 이어서 설치합니다. Microsoft Store로만 연결되는
-  `python` 바로가기는 Python으로 치지 않습니다.
+- **Python이 없어도 설치됩니다**: uv도 Python도 없으면 `install.cmd`가 Python 3.12를 이
+  사용자 계정에 설치하고 이어서 설치합니다. `winget`으로 먼저 시도하고, 없거나 실패하면
+  python.org 공식 설치 파일을 받아 설치합니다(ARM PC는 ARM용). PATH에 없는 설치된
+  Python도 찾아 쓰고, Microsoft Store로만 연결되는 `python` 바로가기는 Python으로 치지 않습니다.
 
 ### Fixed
 - **위젯을 우클릭해도 메뉴가 뜨지 않던 문제(0.9.1)**: 메뉴를 하나로 합치면서 하위 메뉴
