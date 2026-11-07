@@ -177,6 +177,24 @@ class BrowserLaunchTests(unittest.TestCase):
         self.assertEqual(start.call_count, 2)
 
 
+class BadgeTargetTests(unittest.TestCase):
+    def test_badge_moves_on_from_a_startup_window_the_app_hid(self):
+        # The ChatGPT app's first window can stay alive but hidden; the badge
+        # used to wait on it until the helper was restarted.
+        win = Mock()
+        win.user32.IsWindow.return_value = True
+        win.shown.side_effect = lambda hwnd: hwnd == 200
+        win.find_app_window.return_value = 200
+        win.scale.return_value = 1.0
+        win.frame_rect.return_value = Mock(left=0, top=0, right=1000, bottom=800)
+        badge = Mock(target=100, next_search=0.0, drag=None, size=(10, 10), s=1.0, key="codex",
+                     keywords=("chatgpt",), app=Mock(win=win, positions={}))
+        badges.Badge.tick(badge, "ko")
+        self.assertEqual(badge.target, 200)
+        win.own.assert_called_once()
+        badge.refresh.assert_called_once_with("ko")
+
+
 class BadgeCommandTests(unittest.TestCase):
     def test_widget_menu_can_reset_every_badge_position(self):
         lock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

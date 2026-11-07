@@ -387,6 +387,7 @@ class Badge:
         self.app, self.key, self.keywords = app, key, keywords
         self.cache = STATE_DIR / cache_name
         self.target = 0
+        self.next_search = 0.0  # throttles find_app_window
         self.drag = None
         self.signature = None
         self.size = (0, 0)
@@ -481,13 +482,21 @@ class Badge:
     # -- placement -----------------------------------------------------------
     def tick(self, lang):
         win = self.app.win
-        if not self.target or not win.user32.IsWindow(self.target):
-            self.target = win.find_app_window(self.keywords)
-            if self.target:
+        # Look again while the window we follow is not on screen. An app that is
+        # still starting (the ChatGPT app) first shows a window it then hides
+        # for good, and holding on to that one kept the badge away until the
+        # helper restarted.
+        stale = (not self.target or not win.user32.IsWindow(self.target)
+                 or not win.shown(self.target))
+        if stale and time.monotonic() >= self.next_search:
+            self.next_search = time.monotonic() + 1.0
+            found = win.find_app_window(self.keywords)
+            if found and found != self.target:
                 self.win.geometry("+-20000+-20000")  # map off-screen first: no flash
                 self.win.deiconify()
                 self.win.update_idletasks()
-                win.own(self.badge_hwnd(), self.target)
+                win.own(self.badge_hwnd(), found)
+            self.target = found
         if not self.target or not win.shown(self.target):
             if self.win.state() != "withdrawn":
                 self.win.withdraw()

@@ -42,7 +42,8 @@ Codex app title bars**. It never calls a model, so checking usage costs no quota
 
 - Windows 10 또는 11
 - Chrome 또는 Edge
-- Python 3 또는 [uv](https://docs.astral.sh/uv/) (둘 중 하나)
+- Python 3 또는 [uv](https://docs.astral.sh/uv/) (둘 중 하나). 둘 다 없으면 `install.cmd`가 Windows에 기본으로 있는 `winget`으로
+  Python 3.12를 이 사용자 계정에 자동 설치합니다.
 - Git (선택): 있으면 `git pull`로 업데이트하고, 새 버전이 나오면 위젯에 알림이 뜹니다.
 
 ### 설치
@@ -254,7 +255,8 @@ MIT
 
 - Windows 10 or 11
 - Chrome or Edge
-- Python 3 or [uv](https://docs.astral.sh/uv/) (either one)
+- Python 3 or [uv](https://docs.astral.sh/uv/) (either one). If neither is installed, `install.cmd` installs Python 3.12 for
+  the current user with `winget`, which comes with Windows 10/11.
 - Git (optional): update with `git pull` and get notified of new versions.
 
 ### Installation

@@ -9,23 +9,37 @@ if not errorlevel 1 (
   exit /b
 )
 
-rem uv is optional. Fall back to a plain Python interpreter.
-where python.exe >nul 2>nul
+rem A real Python with Tk. (Windows' "python" shortcut that only opens the
+rem Microsoft Store fails this check, so it is skipped.)
+python -c "import tkinter" >nul 2>nul
 if not errorlevel 1 (
   python install.py
   if errorlevel 1 pause
   exit /b
 )
-
-rem Try the Python launcher as a last resort.
-where py.exe >nul 2>nul
+py -c "import tkinter" >nul 2>nul
 if not errorlevel 1 (
   py install.py
   if errorlevel 1 pause
   exit /b
 )
 
-echo Neither uv nor Python was found.
-echo Install uv (https://docs.astral.sh/uv/) or Python (https://www.python.org/), then run install.cmd again.
+rem No Python yet: install it for this user with winget (built into Windows 10/11).
+set "CLAUDE_USAGE_PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if not exist "%CLAUDE_USAGE_PY%" (
+  where winget.exe >nul 2>nul
+  if errorlevel 1 goto no_python
+  echo Python was not found. Installing Python 3.12 for this user with winget...
+  winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements
+)
+if exist "%CLAUDE_USAGE_PY%" (
+  "%CLAUDE_USAGE_PY%" install.py
+  if errorlevel 1 pause
+  exit /b
+)
+
+:no_python
+echo Python could not be found or installed automatically.
+echo Install Python (https://www.python.org/) or uv (https://docs.astral.sh/uv/), then run install.cmd again.
 pause
 exit /b 1
