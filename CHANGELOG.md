@@ -3,7 +3,7 @@
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
 
-## [0.9.2] - 2026-11-02
+## [0.9.2] - 2026-11-09
 
 ### Changed
 - **배지를 우클릭하면 위젯·알림 아이콘과 같은 전체 메뉴가 뜹니다**: 배지만 표시할 때도 보기
