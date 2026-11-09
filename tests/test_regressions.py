@@ -766,6 +766,43 @@ class WidgetTests(unittest.TestCase):
             self.assertTrue(fields[1].endswith("--watch"))
             self.assertEqual(Path(fields[2]), state)  # the Korean folder name survives
 
+    def test_installer_lists_the_app_under_installed_apps(self):
+        import winreg
+        installer = load("tested_install", "install.py")
+        key_path = installer.UNINSTALL_KEY + "Test"
+        self.addCleanup(lambda: winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key_path))
+        with patch.object(installer, "UNINSTALL_KEY", key_path):
+            installer.register_uninstaller(Path(sys.executable))
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            command = winreg.QueryValueEx(key, "UninstallString")[0]
+            version = winreg.QueryValueEx(key, "DisplayVersion")[0]
+        self.assertTrue(command.endswith('claude_usage.pyw" --uninstall'))
+        self.assertEqual(version, widget.APP_VERSION)
+        self.assertEqual(widget.UNINSTALL_KEY, installer.UNINSTALL_KEY)
+
+    def test_quit_turns_auto_start_off_and_close_does_not(self):
+        app = self.app()
+        app.exit = Mock()
+        with tempfile.TemporaryDirectory() as temp:
+            auto = Path(temp) / "auto.enabled"
+            auto.write_text("enabled")
+            with patch.object(widget, "AUTO_FILE", auto), patch.object(widget, "send_control") as send:
+                app.events.put(widget.MENU_ACTIONS[widget.EXIT_ID])
+                app._poll_events()
+                self.assertTrue(auto.exists())
+                app.events.put(widget.MENU_ACTIONS[widget.QUIT_ID])
+                app._poll_events()
+            self.assertFalse(auto.exists())
+        send.assert_called_once_with(widget.WATCH_PORT, "exit")
+
+    def test_watcher_stays_off_after_a_full_quit(self):
+        control = Mock()
+        with patch.object(widget, "bind_control", return_value=control), \
+                patch.object(widget, "AUTO_FILE") as auto, patch.object(widget, "start_main") as start:
+            auto.exists.return_value = False
+            self.assertEqual(widget.run_watcher(), 0)
+        start.assert_not_called()
+
     def test_language_change_drops_error_text_in_the_old_language(self):
         app = self.app()
         app.mode = "both_stacked"

@@ -36,7 +36,8 @@ Codex app title bars**. It never calls a model, so checking usage costs no quota
   언어로 보여 줍니다.
 - **위젯 안에서 복구**: 동기화가 실패하면 우클릭 메뉴에서 다시 시도, 브라우저 재시작,
   다시 로그인을 할 수 있습니다.
-- **완전 제거**: 메뉴나 `uninstall.cmd` 한 번으로 프로그램 폴더까지 남김없이 지웁니다.
+- **완전 제거**: Windows `설정 → 앱 → 설치된 앱`(또는 제어판 `프로그램 제거`)에서 다른
+  프로그램처럼 지우면 프로그램 폴더까지 남김없이 지웁니다.
 
 ### 요구 사항
 
@@ -127,8 +128,9 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 | 항상 위 | 우클릭 → `항상 위` |
 | 동기화 문제 해결 | 우클릭 → `동기화 문제 해결` → `다시 시도` / `리더 브라우저 재시작` / `다시 로그인 (브라우저 창)` |
 | 언어 | 우클릭 → `언어 (Language)` → `한국어` / `영어 (English)` |
-| 종료 | 우클릭 → `종료`. 위젯만 닫히고, 다음에 Claude·ChatGPT 앱을 켜면 다시 뜹니다(완전히 끄려면 `제거`) |
-| 제거 | 우클릭 → `제거 (Uninstall)` |
+| 종료 | 우클릭 → `종료 (앱을 켜면 다시 표시)`. 위젯만 닫히고, 다음에 Claude·ChatGPT 앱을 켜면 다시 뜹니다 |
+| 완전 종료 | 우클릭 → `완전 종료 (자동 실행 끔)`. 감시자까지 끄고, 재부팅해도 앱을 켜도 뜨지 않습니다. 바탕화면 바로가기로 위젯을 다시 열면 자동 실행도 다시 켜집니다 |
+| 제거 | `설정 → 앱 → 설치된 앱` → `Claude Codex Usage` → `제거` |
 
 위젯 헤더의 `USAGE` 아래에 현재 버전이 작게 표시됩니다.
 
@@ -160,11 +162,12 @@ ZIP으로 설치했다면 `uninstall.cmd`로 지운 뒤 새 ZIP을 받아 `insta
 
 ### 제거
 
-우클릭 → `제거 (Uninstall)`, 또는 설치 폴더의 `uninstall.cmd`를 실행합니다. 되돌릴 수
-없으며 다음을 모두 지웁니다.
+Windows `설정 → 앱 → 설치된 앱`(또는 제어판 `프로그램 제거`)에서 `Claude Codex Usage`를
+제거합니다. 설치 폴더의 `uninstall.cmd`로도 같은 제거를 실행할 수 있습니다. 확인 창에서
+`예`를 누르면 되돌릴 수 없으며 다음을 모두 지웁니다.
 
 - 위젯, 시작 프로그램 감시자, 제목 표시줄 배지, 전용 브라우저
-- 바탕화면·시작 프로그램 바로가기
+- 바탕화면·시작 프로그램 바로가기, `설치된 앱` 목록의 항목
 - 설정·캐시·로그 (`%LOCALAPPDATA%\ClaudeCodexUsage`)
 - 로그인 정보가 든 전용 브라우저 프로필 (`%LOCALAPPDATA%\ClaudePet`)
 - 프로그램 폴더 자체 (git 설치의 숨김 `.git` 포함). 단, 그 폴더에 이 앱과 상관없는 파일이
@@ -172,6 +175,10 @@ ZIP으로 설치했다면 `uninstall.cmd`로 지운 뒤 새 ZIP을 받아 `insta
 
 제거하는 동안 그 폴더를 열어 둔 cmd 창이나 탐색기 창이 있으면 폴더가 남을 수 있습니다.
 창을 닫고 폴더를 지우면 됩니다. Python과 uv는 다른 프로그램도 같이 쓰므로 남겨 둡니다.
+
+git clone으로 받은 경우에도 같은 방법으로 지우세요. 받은 폴더만 지우면 프로그램 파일은
+없어지지만, 폴더 밖에 만든 바로가기·설정·로그인 정보(전용 브라우저 프로필)·`설치된 앱`
+항목은 남습니다.
 
 ### 데이터 위치
 
@@ -250,8 +257,8 @@ MIT
   from the pages are shown in the language you pick.
 - **In-widget recovery** when a sync fails: retry, restart the reader browser, or
   sign in again from the right-click menu.
-- **Clean uninstall** from the menu or `uninstall.cmd`, down to the program
-  folder itself.
+- **Clean uninstall** from Windows `Settings → Apps → Installed apps` (or Control
+  Panel → Programs) like any other program, down to the program folder itself.
 
 ### Requirements
 
@@ -344,8 +351,9 @@ opening a watched app brings it back.
 | Always on top | Right-click → `Always on top` |
 | Fix sync issues | Right-click → `Fix sync issues` → `Retry now` / `Restart reader browser` / `Re-sign in (browser)` |
 | Language | Right-click → `Language` → `한국어 (Korean)` / `English` |
-| Exit | Right-click the notification icon → `Exit` |
-| Uninstall | Right-click → `Uninstall` |
+| Close | Right-click → `Close (back when an app opens)`. Closes the widget; it comes back the next time Claude or ChatGPT opens |
+| Quit | Right-click → `Quit (no auto-start)`. Also stops the watcher, so nothing starts again (even after a restart) until you open the widget from its desktop shortcut |
+| Uninstall | `Settings → Apps → Installed apps` → `Claude Codex Usage` → `Uninstall` |
 
 The current version is shown in small type under `USAGE` in the header.
 
@@ -378,11 +386,12 @@ file next to `claude_usage.pyw`.
 
 ### Uninstall
 
-Right-click → `Uninstall`, or run `uninstall.cmd` in the install folder. This
-cannot be undone. It removes:
+Remove `Claude Codex Usage` in Windows `Settings → Apps → Installed apps` (or
+Control Panel → Programs); `uninstall.cmd` in the install folder runs the same
+uninstaller. After you confirm, this cannot be undone. It removes:
 
 - the widget, the Startup watcher, the title-bar badges and the dedicated browsers
-- the desktop and Startup shortcuts
+- the desktop and Startup shortcuts, and the `Installed apps` entry
 - settings, caches and logs (`%LOCALAPPDATA%\ClaudeCodexUsage`)
 - the dedicated browser profiles holding the sign-ins (`%LOCALAPPDATA%\ClaudePet`)
 - the program folder itself (including a git install's hidden `.git`). If that
@@ -392,6 +401,10 @@ cannot be undone. It removes:
 A cmd or Explorer window left open inside the folder can keep it from being
 removed; close it and delete the folder. Python and uv are shared with other
 programs and are left alone.
+
+Uninstall a git clone the same way. Deleting only the cloned folder removes the
+program files but leaves the shortcuts, settings, sign-ins (the dedicated browser
+profiles) and the `Installed apps` entry, which live outside it.
 
 ### Where data lives
 

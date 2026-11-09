@@ -65,7 +65,7 @@ CREATE_NO_WINDOW = 0x08000000
 UPDATE_SOURCES = ("claude_usage.pyw", "usage.py", "codex_web.py", "title_badges.py", "install.py", "install.cmd")
 # What other processes may ask over UDP: "show" (desktop shortcut, a badge),
 # "autoshow" (the watcher noticing an app launch), "menu" (a right-clicked
-# badge: show the full menu) and "exit" (uninstall).
+# badge: show the full menu) and "exit" (Quit and uninstall).
 CONTROL_ACTIONS = {message.encode("ascii"): message for message in ("show", "autoshow", "exit", "menu")}
 
 # The Claude and ChatGPT desktop apps are Microsoft Store (MSIX) packages under
@@ -123,7 +123,7 @@ MODE_MENU = (
 )
 LANG_KO_ID = 3000
 LANG_EN_ID = 3001
-UNINSTALL_ID = 1005
+QUIT_ID = 1005
 FIX_RETRY_ID = 1006
 FIX_RECONNECT_ID = 1007
 FIX_RESTART_ID = 1008
@@ -165,7 +165,6 @@ STRINGS = {
     "fix_restart": {"ko": "리더 브라우저 재시작", "en": "Restart reader browser"},
     "reset_position": {"ko": "위치 초기화 (시계 위로)", "en": "Reset position"},
     "reset_badges": {"ko": "배지 위치 초기화", "en": "Reset badge positions"},
-    "uninstall": {"ko": "제거 (Uninstall)", "en": "Uninstall"},
     "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
     "uninstall_confirm": {
         "ko": "위젯·감시자를 종료하고 바로가기·설정·로그인(전용 브라우저)과\n"
@@ -181,7 +180,8 @@ STRINGS = {
               "(dedicated browsers) were removed.\nPress OK to delete the program folder too.",
     },
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
-    "exit": {"ko": "종료", "en": "Exit"},
+    "exit": {"ko": "종료 (앱을 켜면 다시 표시)", "en": "Close (back when an app opens)"},
+    "quit": {"ko": "완전 종료 (자동 실행 끔)", "en": "Quit (no auto-start)"},
     "language": {"ko": "언어 (Language)", "en": "Language"},
     "lang_ko": {"ko": "한국어", "en": "한국어 (Korean)"},
     "lang_en": {"ko": "영어 (English)", "en": "English"},
@@ -206,7 +206,7 @@ MENU_ACTIONS = {
     LANG_EN_ID: ("lang", "en"),
     RESET_POS_ID: ("reset_position", None),
     RESET_BADGES_ID: ("reset_badges", None),
-    UNINSTALL_ID: ("uninstall", None),
+    QUIT_ID: ("quit", None),
     FIX_RETRY_ID: ("recover", "retry"),
     FIX_RESTART_ID: ("recover", "restart"),
     FIX_RECONNECT_ID: ("recover", "reconnect"),
@@ -244,10 +244,9 @@ def menu_spec(lang, mode, on_top, display):
         item("cmd", RESET_POS_ID, "reset_position", enabled=widget),
         *([item("cmd", RESET_BADGES_ID, "reset_badges")] if display != "widget" else []),
         None,
-        item("cmd", UNINSTALL_ID, "uninstall"),
-        None,
         item("cmd", SHOW_HIDE_ID, "show_hide", enabled=widget),
         item("cmd", EXIT_ID, "exit"),
+        item("cmd", QUIT_ID, "quit"),
     ]
 
 
@@ -1170,8 +1169,9 @@ class UsageApp:
                 send_control(BADGE_PORT, "reset")
             elif action == "menu":
                 self.tray.popup()
-            elif action == "uninstall":
-                self._uninstall()
+            elif action == "quit":
+                self.quit_completely()
+                return
             elif action == "recover":
                 self._recover(payload)
             elif action == "recover_done":
@@ -1410,32 +1410,6 @@ class UsageApp:
                 process.wait(timeout=2)
             except Exception as error:
                 log_error("badge helper stop: %r" % error)
-
-    def _uninstall(self):
-        """Confirm, then launch the uninstaller and quit. The uninstaller stops
-        the watcher, closes the dedicated browsers, and removes the shortcuts,
-        settings, login state and the program folder itself."""
-        try:
-            confirmed = messagebox.askyesno(
-                self._t("uninstall_confirm_title"), self._t("uninstall_confirm")
-            )
-        except Exception:
-            confirmed = False
-        if not confirmed:
-            return
-        try:
-            subprocess.Popen(
-                [python_console(), str(SELF_SCRIPT), "--uninstall"],
-                cwd=os.environ.get("TEMP") or neutral_dir(),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=CREATE_NO_WINDOW,
-                close_fds=True,
-            )
-        except Exception as error:
-            log_error("uninstall launch failed: %r" % error)
-        self.exit()
 
     def _recover(self, action):
         """In-widget recovery for sync failures. 'retry' re-syncs; 'restart'
@@ -2033,12 +2007,24 @@ class UsageApp:
         else:
             self.hide()
 
+    def quit_completely(self):
+        """Stop everything and stay stopped: no auto-start, no watcher, until the
+        user opens the desktop shortcut again (which turns both back on)."""
+        try:
+            AUTO_FILE.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            log_error(repr(error))
+        send_control(WATCH_PORT, "exit")
+        self.exit()
+
     def exit(self):
         if self.exiting:
             return
         self.exiting = True
         # Exit closes the widget for now only: the watcher still brings it back
-        # the next time Claude or ChatGPT is opened (uninstall removes it all).
+        # the next time Claude or ChatGPT is opened (see quit_completely).
         # Close both dedicated reader browsers (Claude and Codex); a browser left
         # running keeps holding its profile and would block a later reinstall.
         for script in READER_SCRIPTS:
@@ -2094,6 +2080,23 @@ def running_app_keys():
     return keys
 
 
+def start_watcher():
+    """Start the background watcher unless one is already running."""
+    try:
+        bind_control(WATCH_PORT).close()
+    except OSError:
+        return  # its port is taken: it is running
+    subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "--watch"],
+        cwd=neutral_dir(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=CREATE_NO_WINDOW,
+        close_fds=True,
+    )
+
+
 def start_main():
     """Start the widget for an app that just launched (the watcher's job)."""
     subprocess.Popen(
@@ -2120,12 +2123,15 @@ def run_watcher():
             time.sleep(0.5)
     if control is None:
         return 0
+    if not AUTO_FILE.exists():  # fully quit: stay off until the widget is opened
+        control.close()
+        return 0
     control.settimeout(2)
     known = set()
     try:
         while True:
             current = running_app_keys()
-            if (current - known) and AUTO_FILE.exists():
+            if current - known:
                 start_main()
             known = current
             try:
@@ -2265,6 +2271,19 @@ def stop_leftover_processes():
     time.sleep(1)
 
 
+# The "Installed apps" / "Programs and Features" entry install.py registers.
+UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCodexUsage"
+
+
+def remove_uninstall_entry():
+    try:
+        import winreg
+
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
+    except (OSError, ImportError):
+        pass
+
+
 def uninstall():
     """Stop the app and remove everything it installed: the widget/watcher, the
     dedicated reader browsers, the shortcuts, the saved settings/login, and the
@@ -2275,6 +2294,14 @@ def uninstall():
     except (OSError, ValueError, AttributeError):
         lang = None
     lang = lang if lang in LANGS else DEFAULT_LANG
+    # Started from Settings > Apps (or uninstall.cmd): ask before deleting.
+    if "--yes" not in sys.argv:
+        root = tk.Tk()
+        root.withdraw()
+        confirmed = messagebox.askyesno(tr(lang, "uninstall_confirm_title"), tr(lang, "uninstall_confirm"))
+        root.destroy()
+        if not confirmed:
+            return
     send_control(MAIN_PORT, "exit")
     send_control(WATCH_PORT, "exit")
     wait_for_exit((MAIN_PORT, WATCH_PORT), timeout=45)
@@ -2286,6 +2313,7 @@ def uninstall():
         except Exception as error:
             log_error("uninstall close %s: %r" % (script.name, error))
     stop_leftover_processes()
+    remove_uninstall_entry()
     for path in (STARTUP_LINK, DESKTOP_LINK):
         try:
             path.unlink()
@@ -2332,6 +2360,10 @@ def main():
     except OSError:
         send_control(MAIN_PORT, "autoshow" if "--auto" in sys.argv else "show")
         return 0
+    try:
+        start_watcher()  # back on after a full quit
+    except OSError as error:
+        log_error("watcher start: %r" % error)
     UsageApp(control).run()
     return 0
 

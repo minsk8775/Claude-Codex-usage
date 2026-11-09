@@ -123,6 +123,36 @@ def create_shortcut(path, pythonw, arguments, description):
         com_release(persist, link)
 
 
+# Listed under Settings > Apps > Installed apps (and Control Panel > Programs),
+# so the app is removed like any other program. Per user: no admin rights.
+UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCodexUsage"
+
+
+def app_version():
+    import re
+
+    match = re.search(r'^APP_VERSION = "([^"]+)"', APP_SCRIPT.read_text(encoding="utf-8"), re.M)
+    return match.group(1) if match else ""
+
+
+def register_uninstaller(pythonw):
+    import winreg
+
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as key:
+        for name, value in (
+            ("DisplayName", "Claude Codex Usage"),
+            ("DisplayVersion", app_version()),
+            ("Publisher", "minsk8775"),
+            ("DisplayIcon", str(ICON)),
+            ("InstallLocation", str(BASE_DIR)),
+            ("URLInfoAbout", "https://github.com/minsk8775/claude-codex-usage"),
+            ("UninstallString", '"%s" "%s" --uninstall' % (pythonw, APP_SCRIPT)),
+        ):
+            winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+        for name in ("NoModify", "NoRepair"):
+            winreg.SetValueEx(key, name, 0, winreg.REG_DWORD, 1)
+
+
 def start(pythonw, *arguments):
     subprocess.Popen(
         [str(pythonw), str(APP_SCRIPT), *arguments],
@@ -160,6 +190,8 @@ def main():
         '"%s" --watch' % APP_SCRIPT,
         "Start Claude Codex Usage when Claude Code opens",
     )
+
+    register_uninstaller(pythonw)
 
     start(pythonw, "--watch")
     start(pythonw)
