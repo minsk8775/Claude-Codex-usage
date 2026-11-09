@@ -121,10 +121,12 @@ not a substitute for checking what is being committed.
   your user can attach to the dedicated browser or read its profile. Origin
   checks and process-identity checks do not protect against a hostile program
   that can already modify your files. Do not use this profile for other browsing.
-  The loopback interface is shared by everyone signed in to the same PC, so on a
-  PC with other (untrusted) Windows accounts, those accounts could also reach the
-  debug port while the reader browser runs. Use the app on a PC you do not share,
-  or stop it (`Exit`) while others are signed in.
+  The loopback interface is shared by everyone signed in to the same PC. When
+  another Windows account is signed in (switched user or remote desktop), the
+  readers therefore close their browser after every sync instead of keeping it
+  open, so the debug port exists only for the few seconds a sync takes. (Chrome
+  offers no authentication for this port, and its pipe alternative would need a
+  long-running process that owns the browser.)
 - **The host is trusted.** The app uses only the Python standard library and
   Windows' own components (installation creates its shortcuts through the Windows
   shell-link interface, via ctypes).

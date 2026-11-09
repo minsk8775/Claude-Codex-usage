@@ -66,6 +66,7 @@ STRINGS = {
     "soon": {"ko": "곧 초기화", "en": "resets soon"},
     "syncing": {"ko": "동기화 중…", "en": "Syncing…"},
     "login": {"ko": "로그인 필요", "en": "Sign-in needed"},
+    "check": {"ko": "보안 확인 필요", "en": "Security check needed"},
     "failed": {"ko": "동기화 실패", "en": "Sync failed"},
 }
 
@@ -195,7 +196,7 @@ def short_reset(sub, lang="ko", now=None):
     return line.strip()[:18]
 
 
-STALE_SECONDS = 10 * 60  # syncs run every 2 minutes
+STALE_SECONDS = 3 * 60  # syncs run every 2 minutes
 
 
 def is_stale(data, now=None):
@@ -220,6 +221,8 @@ def columns(data, lang="ko", now=None):
         return [{"warn": True, "label": tr(lang, "syncing")}]
     if data.get("code") == "needs_login":
         return [{"warn": True, "label": tr(lang, "login")}]
+    if data.get("code") == "needs_check":
+        return [{"warn": True, "label": tr(lang, "check")}]
     bars = data.get("bars") or []
     if data.get("error") or not bars:
         return [{"warn": True, "label": tr(lang, "failed") if data.get("error") else tr(lang, "syncing")}]

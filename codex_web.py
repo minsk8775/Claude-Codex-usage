@@ -41,6 +41,7 @@ LANG = "ko"
 
 SyncError = usage.SyncError
 NeedsLogin = usage.NeedsLogin
+NeedsCheck = usage.NeedsCheck
 
 
 # The usage page has no ARIA meters; values are plain spans. Collect the
@@ -224,6 +225,7 @@ def read_page(devtools):
 
 def wait_for_usage(devtools):
     deadline = time.time() + usage.PAGE_TIMEOUT
+    extended = False
     last = {}
     while time.time() < deadline:
         last = read_page(devtools)
@@ -240,7 +242,12 @@ def wait_for_usage(devtools):
         if ("/auth" in url or "/login" in url or "login.openai" in url
                 or ("/settings" not in url and url.startswith("http") and signed_out_words)):
             raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
+        if usage.on_challenge(last) and not extended:
+            deadline += usage.CHALLENGE_GRACE  # usually clears by itself
+            extended = True
         time.sleep(0.5)
+    if usage.on_challenge(last):
+        raise usage.challenge_error("ChatGPT")
     error = SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
     # Which page it was on, for error.log. Only the address and title: the page
     # text can contain the account's name or e-mail address.
@@ -256,7 +263,7 @@ def refresh_usage(devtools):
     # Mark the current document so the old page is never read as the new one.
     devtools.evaluate("window.__usageReaderOld = true")
     devtools.call("Page.navigate", {"url": CODEX_USAGE_URL})
-    deadline = time.time() + usage.PAGE_TIMEOUT
+    deadline = time.time() + 10
     while time.time() < deadline:
         try:
             if devtools.evaluate("window.__usageReaderOld === true") is not True:
@@ -307,6 +314,14 @@ def main():
 
     try:
         emit(sync_usage())
+    except NeedsCheck:
+        try:
+            os.remove(usage.READY)  # don't keep hitting the check in the background
+        except OSError:
+            pass
+        emit({"code": "needs_check", "error": usage.t(
+            "ChatGPT 보안 확인 필요\n↻를 눌러 확인 창을 여세요",
+            "ChatGPT needs a security check\nPress ↻ to open it")})
     except NeedsLogin:
         try:
             os.remove(usage.READY)

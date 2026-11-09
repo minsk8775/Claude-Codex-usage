@@ -133,6 +133,28 @@ class NeedsLogin(SyncError):
     """The dedicated browser profile is not signed in to Claude."""
 
 
+class NeedsCheck(NeedsLogin):
+    """The site shows a security check ("verify you are human") that did not
+    clear by itself; a person has to pass it once in the visible window."""
+
+
+# Words of the security-check page (Cloudflare) the sites can show first.
+CHALLENGE_WORDS = ("just a moment", "잠시만 기다리", "verify you are human", "사람인지 확인",
+                   "보안 확인", "security verification", "checking your browser", "cloudflare")
+# A check usually clears by itself within seconds in a real browser; allow it
+# this much extra time before asking the user.
+CHALLENGE_GRACE = 25
+
+
+def on_challenge(page):
+    text = ("%s\n%s" % (page.get("title") or "", page.get("body") or "")).lower()
+    return any(word in text for word in CHALLENGE_WORDS)
+
+
+def challenge_error(site):
+    return NeedsCheck(t("%s 보안 확인이 필요합니다" % site, "%s needs a security check" % site))
+
+
 class HiddenDesktopProcess:
     """Small Popen-like wrapper for a process on a non-interactive desktop."""
 
@@ -856,6 +878,7 @@ def read_page(devtools):
 
 def wait_for_usage(devtools):
     deadline = time.time() + PAGE_TIMEOUT
+    extended = False
     last = {}
     while time.time() < deadline:
         last = read_page(devtools)
@@ -869,12 +892,16 @@ def wait_for_usage(devtools):
             or "이메일로 계속하기" in body
             or "continue with google" in body
             or "continue with email" in body
-            or "보안 확인 수행 중" in body
-            or "security verification" in body
-            or "cloudflare" in body
         ):
             raise NeedsLogin(t("Claude 로그인이 필요합니다", "Claude sign-in is needed"))
+        if on_challenge(last) and not extended:
+            # Give the security check time to clear on its own (it used to
+            # count as signed out at once and forced a new sign-in).
+            deadline += CHALLENGE_GRACE
+            extended = True
         time.sleep(0.5)
+    if on_challenge(last):
+        raise challenge_error("Claude")
     if len(last.get("meters") or []) < 2:
         raise SyncError(t("공식 사용량을 읽지 못했습니다", "Could not read the official usage"))
     return last
@@ -992,6 +1019,18 @@ def sync_usage(read=read_usage):
     time out, and the second attempt reuses the now-warm browser and its
     already-loaded page, so it usually succeeds. NeedsLogin is not retried.
     """
+    try:
+        return _sync_twice(read)
+    finally:
+        # Normally the browser stays open between syncs to keep the sign-in.
+        # With another account signed in to this PC it could reach the debug
+        # port, so close the browser after every sync then (each sync then
+        # starts it again, which is slower).
+        if other_accounts_signed_in():
+            close_browser_gracefully(load_state())
+
+
+def _sync_twice(read):
     last_error = None
     for attempt in range(2):
         state = ensure_browser()
@@ -1017,6 +1056,70 @@ def sync_usage(read=read_usage):
 def close_browser():
     stop_owned_browser(load_state())
     stop_profile_browsers()
+
+
+def other_accounts_signed_in():
+    """True when another Windows account is signed in to this PC (switched
+    user, remote desktop). The loopback interface is shared with it, so the
+    reader browser's debug port would be reachable from that account too."""
+    if os.name != "nt":
+        return False
+    from ctypes import wintypes
+
+    class SessionInfo(ctypes.Structure):
+        _fields_ = [("SessionId", wintypes.DWORD), ("pWinStationName", wintypes.LPWSTR),
+                    ("State", ctypes.c_int)]
+
+    try:
+        wtsapi = ctypes.windll.wtsapi32
+        wtsapi.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        sessions = ctypes.POINTER(SessionInfo)()
+        count = wintypes.DWORD()
+        if not wtsapi.WTSEnumerateSessionsW(None, 0, 1, ctypes.byref(sessions), ctypes.byref(count)):
+            return False
+    except (AttributeError, OSError):
+        return False
+    me = (os.environ.get("USERNAME") or "").lower()
+    try:
+        for index in range(count.value):
+            info = sessions[index]
+            if info.State not in (0, 4):  # WTSActive, WTSDisconnected (switched away)
+                continue
+            buffer, size = ctypes.c_void_p(), wintypes.DWORD()
+            if not wtsapi.WTSQuerySessionInformationW(
+                    None, info.SessionId, 5, ctypes.byref(buffer), ctypes.byref(size)):  # WTSUserName
+                continue
+            try:
+                name = ctypes.wstring_at(buffer.value).lower() if buffer.value else ""
+            finally:
+                wtsapi.WTSFreeMemory(buffer)
+            if name and name != me:
+                return True
+    finally:
+        wtsapi.WTSFreeMemory(ctypes.cast(sessions, ctypes.c_void_p))
+    return False
+
+
+def close_browser_gracefully(state):
+    """Ask the reader browser to quit, so it saves its sign-in to the profile
+    first, then make sure it is gone."""
+    port = state.get("port")
+    if not port:
+        return
+    try:
+        version = http_json("http://127.0.0.1:%d/json/version" % int(port), timeout=2)
+        devtools = DevTools(version["webSocketDebuggerUrl"], int(port))
+        try:
+            devtools.call("Browser.close")
+        finally:
+            devtools.close()
+    except (OSError, ValueError, KeyError, TypeError, SyncError):
+        pass  # the connection drops as the browser quits
+    for _ in range(25):
+        if not debug_alive(port):
+            break
+        time.sleep(0.2)
+    stop_owned_browser(state)
 
 
 def self_test():
@@ -1104,6 +1207,14 @@ def main():
 
     try:
         emit(sync_usage())
+    except NeedsCheck:
+        try:
+            os.remove(READY)  # don't keep hitting the check in the background
+        except OSError:
+            pass
+        emit({"code": "needs_check", "error": t(
+            "Claude 보안 확인 필요\n↻를 눌러 확인 창을 여세요",
+            "Claude needs a security check\nPress ↻ to open it")})
     except NeedsLogin:
         try:
             os.remove(READY)

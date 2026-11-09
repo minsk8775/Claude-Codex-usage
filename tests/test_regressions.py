@@ -201,11 +201,26 @@ class StaleUsageTests(unittest.TestCase):
         # badge must not present it as current usage.
         from datetime import timedelta, timezone
         now = datetime.now(timezone.utc)
-        fresh = {"synced_at": (now - timedelta(minutes=3)).isoformat(), "bars": [{"pct": 12, "label": "주간 한도"}]}
-        old = {"synced_at": (now - timedelta(minutes=30)).isoformat(), "bars": [{"pct": 8, "label": "주간 한도"}]}
+        fresh = {"synced_at": (now - timedelta(minutes=1)).isoformat(), "bars": [{"pct": 12, "label": "주간 한도"}]}
+        old = {"synced_at": (now - timedelta(minutes=4)).isoformat(), "bars": [{"pct": 8, "label": "주간 한도"}]}
         self.assertFalse(badges.columns(fresh)[0]["stale"])
         self.assertTrue(badges.columns(old)[0]["stale"])
         self.assertTrue(badges.is_stale({"bars": []}))  # unknown age
+
+
+class SharedPcTests(unittest.TestCase):
+    def test_reader_browser_closes_after_sync_only_on_a_shared_pc(self):
+        for shared in (False, True):
+            with patch.object(claude, "_sync_twice", return_value={"bars": []}), \
+                    patch.object(claude, "other_accounts_signed_in", return_value=shared), \
+                    patch.object(claude, "load_state", return_value={"port": 1}), \
+                    patch.object(claude, "close_browser_gracefully") as close:
+                claude.sync_usage()
+            self.assertEqual(close.called, shared)
+
+    @unittest.skipUnless(os.name == "nt", "Windows sessions")
+    def test_signed_in_accounts_can_be_listed(self):
+        self.assertIsInstance(claude.other_accounts_signed_in(), bool)
 
 
 class BadgeCommandTests(unittest.TestCase):
@@ -241,6 +256,28 @@ class CodexWebTests(unittest.TestCase):
         devtools.call.assert_any_call("Page.navigate", {"url": web.CODEX_USAGE_URL})
         self.assertEqual(devtools.evaluate.call_count, 3)
 
+    def test_security_check_gets_time_then_asks_for_the_window(self):
+        # A Cloudflare check used to fail the sync (Codex) or count as signed
+        # out (Claude); it now gets extra time and, if it stays, a clear ask.
+        devtools = Mock()
+        check = {"url": "https://chatgpt.com/settings/usage", "title": "Just a moment...", "body": ""}
+        clock = iter(range(0, 10000, 5))
+        with patch.object(web, "read_page", side_effect=[check, check, {"blocks": WEB_FIXTURE_BLOCKS}]), \
+                patch.object(web.time, "sleep"), patch.object(web.time, "time", side_effect=lambda: next(clock)):
+            self.assertTrue(web.wait_for_usage(devtools)["blocks"])  # the check cleared by itself
+        clock = iter(range(0, 10000, 5))
+        with patch.object(web, "read_page", return_value=check), patch.object(web.time, "sleep"), \
+                patch.object(web.time, "time", side_effect=lambda: next(clock)), \
+                self.assertRaises(web.NeedsCheck):
+            web.wait_for_usage(devtools)
+        claude_check = {"url": "https://claude.ai/settings/usage", "title": "", "body": "보안 확인 수행 중"}
+        clock = iter(range(0, 10000, 5))
+        with patch.object(claude, "read_page", return_value=claude_check), patch.object(claude.time, "sleep"), \
+                patch.object(claude.time, "time", side_effect=lambda: next(clock)), \
+                self.assertRaises(claude.NeedsCheck):
+            claude.wait_for_usage(devtools)
+        self.assertEqual(badges.columns({"code": "needs_check"})[0]["label"], "보안 확인 필요")
+
     def test_loading_settings_page_is_not_mistaken_for_sign_in(self):
         devtools = Mock()
         loading = {"url": "https://chatgpt.com/settings/usage?tab=overview", "body": "보안 · 로그인 설정"}
@@ -253,13 +290,13 @@ class CodexWebTests(unittest.TestCase):
 
     def test_page_without_usage_reports_what_it_showed(self):
         devtools = Mock()
-        page = {"url": "https://chatgpt.com/codex", "title": "Codex", "body": "Just a moment"}
+        page = {"url": "https://chatgpt.com/codex", "title": "Codex", "body": "Loading your workspace"}
         with patch.object(web, "read_page", return_value=page), \
                 patch.object(web.usage, "PAGE_TIMEOUT", 0.05), patch.object(web.time, "sleep"), \
                 self.assertRaises(web.SyncError) as raised:
             web.wait_for_usage(devtools)
         self.assertIn("chatgpt.com/codex", raised.exception.detail)
-        self.assertNotIn("Just a moment", raised.exception.detail)  # page text may hold the e-mail
+        self.assertNotIn("Loading your", raised.exception.detail)  # page text may hold the e-mail
 
     def test_hidden_reader_window_has_a_real_size(self):
         flags = web.usage.browser_flags(1234, "profile", visible=False)

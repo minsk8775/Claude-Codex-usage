@@ -1244,8 +1244,8 @@ class UsageApp:
             try:
                 script = source["script"]
                 # Each reader may try twice, each waiting for the page to load
-                # (up to ~45 s), so give it more than the default minute.
-                result = run_script(script, "--sync", "--lang", lang, timeout=100)
+                # and for a security check to clear, so allow well over a minute.
+                result = run_script(script, "--sync", "--lang", lang, timeout=150)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)
@@ -1254,7 +1254,7 @@ class UsageApp:
                 data = self._load_latest(source)
                 if data.get("detail"):
                     log_error("%s: %s" % (key, data["detail"]))
-                if manual and data.get("code") == "needs_login":
+                if manual and data.get("code") in ("needs_login", "needs_check"):
                     run_script(script, "--connect", "--lang", lang)
                 if data.get("code") == "sync_failed":
                     failed.append(key)
@@ -2037,12 +2037,8 @@ class UsageApp:
         if self.exiting:
             return
         self.exiting = True
-        try:
-            AUTO_FILE.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError as error:
-            log_error(repr(error))
+        # Exit closes the widget for now only: the watcher still brings it back
+        # the next time Claude or ChatGPT is opened (uninstall removes it all).
         # Close both dedicated reader browsers (Claude and Codex); a browser left
         # running keeps holding its profile and would block a later reinstall.
         for script in READER_SCRIPTS:
