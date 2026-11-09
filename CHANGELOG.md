@@ -7,13 +7,12 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 
 ### Changed
 - **배지를 우클릭하면 위젯·알림 아이콘과 같은 전체 메뉴가 뜹니다**: 배지만 표시할 때도 보기
-  방식, 표시 방식, 언어, 동기화 문제 해결, 제거, 종료를 배지에서 바로 고릅니다.
+  방식, 표시 방식, 언어, 동기화 문제 해결, 종료를 배지에서 바로 고릅니다.
   `배지 위치 초기화`는 이 메뉴에 들어 있습니다(배지를 쓸 때만 보임).
 - **Python이 없어도 설치됩니다**: uv도 Python도 없으면 `install.cmd`가 Python 3.12를 이
   사용자 계정에 설치하고 이어서 설치합니다. `winget`으로 먼저 시도하고, 없거나 실패하면
   python.org 공식 설치 파일을 받아 설치합니다(ARM PC는 ARM용). PATH에 없는 설치된
   Python도 찾아 쓰고, Microsoft Store로만 연결되는 `python` 바로가기는 Python으로 치지 않습니다.
-
 - **메뉴의 `제거`를 `완전 종료`로 바꾸고, 제거는 Windows `설치된 앱`에서 합니다**:
   - `종료 (앱을 켜면 다시 표시)`: 위젯만 닫습니다. 다음에 Claude·ChatGPT 앱을 켜면 다시 뜹니다.
   - `완전 종료 (자동 실행 끔)`: 감시자까지 꺼서 재부팅해도 다시 뜨지 않습니다. 바탕화면
@@ -21,6 +20,8 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   - 설치하면 `설정 → 앱 → 설치된 앱`(제어판 `프로그램 제거`)에 등록되어, 다른 프로그램처럼
     제거합니다(확인 창을 거침). 바로가기·설정·로그인 정보·프로그램 폴더와 이 등록 항목까지
     지웁니다. `uninstall.cmd`도 같은 제거를 실행합니다.
+- Pin GitHub Actions to verified commit SHAs and test settings replacement and
+  replacement failures using temporary files.
 
 ### Fixed
 - **위젯을 우클릭해도 메뉴가 뜨지 않던 문제(0.9.1)**: 메뉴를 하나로 합치면서 하위 메뉴
@@ -83,11 +84,7 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   남깁니다.
 - Save widget settings with the existing atomic JSON writer so an interrupted
   save keeps the previous complete settings file.
-- Correct the documented UDP commands to `show`, `autoshow`, and `exit`.
-
-### Changed
-- Pin GitHub Actions to verified commit SHAs and test settings replacement and
-  replacement failures using temporary files.
+- Correct the documented UDP commands (now `show`, `autoshow`, `menu` and `exit`).
 
 ## [0.9.1] - 2026-10-27
 
