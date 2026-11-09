@@ -218,6 +218,16 @@ class CodexWebTests(unittest.TestCase):
             web.refresh_usage(devtools)
         devtools.call.assert_any_call("Page.navigate", {"url": "https://chatgpt.com/settings/usage?tab=overview"})
 
+    def test_reader_reloads_a_page_that_is_already_open(self):
+        # The open tab keeps the numbers from when it loaded (8% shown, 12% used).
+        devtools = Mock()
+        devtools.evaluate.side_effect = [None, True, False]  # mark, old page, new page
+        with patch.object(web, "read_page", return_value={"blocks": WEB_FIXTURE_BLOCKS}), \
+                patch.object(web.time, "sleep"):
+            web.refresh_usage(devtools)
+        devtools.call.assert_any_call("Page.navigate", {"url": web.CODEX_USAGE_URL})
+        self.assertEqual(devtools.evaluate.call_count, 3)
+
     def test_page_without_usage_reports_what_it_showed(self):
         devtools = Mock()
         page = {"url": "https://chatgpt.com/codex", "title": "Codex", "body": "Just a moment"}

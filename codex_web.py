@@ -244,9 +244,21 @@ def wait_for_usage(devtools):
 
 
 def refresh_usage(devtools):
+    """Load the usage page afresh. The page does not update its numbers on its
+    own, so reading the tab the background browser already had open showed
+    the usage from when that browser started."""
     devtools.call("Page.enable")
-    if not read_page(devtools).get("blocks"):
-        devtools.call("Page.navigate", {"url": CODEX_USAGE_URL})
+    # Mark the current document so the old page is never read as the new one.
+    devtools.evaluate("window.__usageReaderOld = true")
+    devtools.call("Page.navigate", {"url": CODEX_USAGE_URL})
+    deadline = time.time() + usage.PAGE_TIMEOUT
+    while time.time() < deadline:
+        try:
+            if devtools.evaluate("window.__usageReaderOld === true") is not True:
+                break
+        except (SyncError, OSError):
+            pass  # the old page is being torn down
+        time.sleep(0.2)
     return wait_for_usage(devtools)
 
 
