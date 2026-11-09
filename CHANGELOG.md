@@ -2,6 +2,11 @@
 
 All notable changes to Claude Codex Usage are documented here. Versions follow
 [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.
+Each version lists its changes in Korean first, then in English (0.7.0 is in
+English only).
+
+이 프로젝트의 모든 주요 변경 사항을 적습니다. 버전마다 한국어 다음에 영어로 적습니다
+(0.7.0은 영어로만 적혀 있습니다).
 
 ## [0.9.2] - 2026-11-09
 
@@ -86,6 +91,104 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   save keeps the previous complete settings file.
 - Correct the documented UDP commands (now `show`, `autoshow`, `menu` and `exit`).
 
+### English
+
+#### Changed
+- **Right-clicking a badge opens the full menu**, the same one as the widget and
+  the notification icon, so view mode, display mode, language, sync fixes and
+  Close are reachable from the badges even in badges-only mode.
+  `Reset badge positions` is in that menu (shown only while badges are in use).
+- **Installing no longer needs Python up front**: when neither uv nor Python is
+  found, `install.cmd` installs Python 3.12 for the current user and carries on.
+  It tries `winget` first and otherwise downloads the official python.org
+  installer (the ARM build on ARM PCs). It also finds an installed Python that
+  is not on PATH, and no longer mistakes the Microsoft Store `python` shortcut
+  for a real interpreter.
+- **The menu's `Uninstall` became `Quit`; uninstall from Windows `Installed apps`**:
+  - `Close (back when an app opens)`: closes the widget; it comes back the next
+    time Claude or ChatGPT opens.
+  - `Quit (no auto-start)`: also stops the watcher, so nothing starts again, even
+    after a restart, until the widget is opened from its desktop shortcut.
+  - Installing registers the app under `Settings → Apps → Installed apps`
+    (Control Panel → Programs), so it is removed like any other program, after a
+    confirmation. That removes the shortcuts, settings, sign-ins, the program
+    folder and the entry itself. `uninstall.cmd` runs the same uninstaller.
+- Pin GitHub Actions to verified commit SHAs and test settings replacement and
+  replacement failures using temporary files.
+
+#### Fixed
+- **The widget's right-click menu did not open (0.9.1)**: building its submenus
+  (display mode, language, sync fixes) raised an error, so the whole menu, and
+  with it recovery items such as `Re-sign in`, was unusable. A Windows test now
+  opens the menu and invokes every item.
+- The hidden reader browser now uses a normal window size (1280×900) instead of
+  1×1 (it runs on an invisible desktop, so nothing shows on screen). When usage
+  cannot be read, the page's address and title are written to `error.log`.
+- **Codex limits could not be read (address change)**: the ChatGPT usage page is
+  now split into `Overview` and `Analytics` tabs, and the reader's address
+  opened `Analytics` (`?tab=analytics`), which has no limits. It now opens
+  `https://chatgpt.com/settings/usage?tab=overview` directly, and the widget uses
+  that address when it opens the Codex website too.
+- **Error text stayed in the previous language after switching languages**: the
+  text is stored in the language the reader ran with, so it stayed until the
+  next sync finished. Switching now shows `Syncing…` in the new language at once.
+- **Claude kept showing `Official usage sync failed` ("Could not start the usage
+  browser")**: a leftover dedicated Claude browser still held the profile, so
+  every new launch handed off to it and exited. When a launch fails, and on
+  `Restart reader browser`, browsers using that profile are closed and the
+  reader launches again (your own Chrome is never touched). Looking for them
+  takes seconds, so it is not done on every launch.
+- **Old usage looked current**: a reader stopped by its time limit left the
+  previous values in the cache, and the badges kept showing them without any
+  sign that syncing had stopped. Numbers not refreshed for over 3 minutes are now
+  drawn grey. The reader time limit went from 60 to 150 seconds (room for a page
+  reload, a security check and a second attempt).
+- **Security checks (Cloudflare) failed the sync or signed you out**: Claude took
+  the check page for a sign-out and asked you to sign in again; Codex just
+  failed. Such a check usually clears by itself within seconds, so the readers
+  now wait 25 seconds more and then show `Security check needed`; press ↻ and
+  pass it once in the window that opens.
+- **After `Exit` the widget never came back when an app opened**: exiting also
+  turned auto-start off. Closing now only closes the widget.
+- **Security: other Windows accounts on the same PC could reach the reader
+  browser**: its debug port listens on this PC only, but every account signed in
+  to the PC can reach it. While another account is signed in, the browser is
+  closed after every sync, so the port is open only during the few seconds a
+  sync takes (on a PC used by one person it stays open as before).
+- **ChatGPT could be taken as signed out by mistake**: while the usage page was
+  still loading, the word `로그인` ("sign in") anywhere on it made the reader
+  treat it as the sign-in page and drop the connection. Only leaving the
+  settings page for the sign-in or home page counts as signed out now.
+- **Security: a downloaded Python installer was run unchecked**: the python.org
+  installer now runs only with a valid Python Software Foundation signature.
+- **Codex usage showed an old, lower value**: the reader read the usage page the
+  background browser already had open, and that page never updates its numbers
+  by itself, so it kept showing the value from when the browser started (8%
+  while 12% was used). The page is now reloaded on every sync. Claude is not
+  affected: its reader presses the page's refresh button.
+- **The Codex badge did not appear on the ChatGPT window at startup**: the
+  ChatGPT app shows a window while it starts and then hides it, and the badge
+  kept following that hidden window until a display-mode switch restarted the
+  badge helper. While the followed window is off screen, the badge looks for the
+  app window again every second.
+- **In badges-only mode Codex usage was empty after start**: the widget reads
+  Claude and then Codex, and each launch first looked for leftover browsers, so
+  Codex, second in line, ran past the 60-second limit, and the next sync was two
+  minutes away. That check now runs only after a failed launch, and a reader that
+  fails is retried after 20 seconds (twice in a row at most).
+- **Security: uninstall could delete a folder holding other files**: uninstall
+  deleted the whole program folder, so app files dropped straight into a folder
+  such as `Downloads` could take that folder with them. The folder is deleted
+  only when it holds nothing but the app's files; otherwise only the app's files
+  are removed. Leftover processes are found by the full paths of the app's
+  scripts rather than the folder, so other Python programs are never closed.
+- **Security: page text in the diagnostic log**: when Codex could not be read,
+  `error.log` got the start of the page text, which can include the account name
+  or e-mail address. Only the page's address and title are logged now.
+- Save widget settings with the existing atomic JSON writer so an interrupted
+  save keeps the previous complete settings file.
+- Correct the documented UDP commands (now `show`, `autoshow`, `menu` and `exit`).
+
 ## [0.9.1] - 2026-10-27
 
 ### Fixed
@@ -121,6 +224,50 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   해당 값은 무시합니다.
 - 0.1.0 이전 단독 위젯(Claude 전용·Codex 전용) 정리 기능과 `cleanup-legacy.cmd`.
 - 갱신이 멈춘 `HISTORY.md`와 쓰지 않는 `assets/screenshot.svg`.
+
+### English
+
+#### Fixed
+- **The widget did not notice the Codex app**: only executables with `chatgpt`
+  in their name counted as the Codex app, but the Codex desktop app is
+  `Codex.exe`. In badges-only mode Codex could go unsynced, the auto view could
+  miss it, and double-clicking the Codex part might not open the app. `Codex.exe`
+  is now recognised, and when both run the order is Codex app → ChatGPT →
+  ChatGPT Classic.
+- **On a narrow window the Claude badge was pushed off the window's left edge**:
+  it now stays on the window.
+- **Some errors appeared in English in Korean mode**: seven browser-connection
+  errors existed only in English and showed up as-is for Codex. They now follow
+  the chosen language.
+- **English badges used mixed reset-time formats**: they now use one format,
+  such as `in 2h 12m`, and dates like `Resets Oct 24, 5:10 PM` become time left
+  (`in 2d 2h`), as in Korean.
+
+#### Changed
+- **Installing no longer needs pywin32.** Shortcuts are created by calling
+  Windows' shell-link interface (IShellLinkW) directly with Python's standard
+  `ctypes`, so the whole app now uses only the standard library. The pywin32
+  step and its errors are gone, and paths survive any characters in user or
+  folder names (checked by a new Windows test).
+- The notification-icon menu and the widget's right-click menu are built from
+  one menu definition (same look and behaviour).
+- The Codex reader now shares the Claude reader's sync flow instead of a copy,
+  and unused code was removed: restart handling from the auto-update days, a
+  control command nothing sent, and non-Windows branches (no behaviour change).
+- A Windows test checks that the installer really creates its shortcuts.
+- The Codex reader's `--self-test` moved into the regular tests (`tests/`), which
+  now run on Windows for every push to GitHub.
+
+#### Removed
+- **The Codex `Local CLI logs` data source and the `Also show Codex Spark usage`
+  toggle**: Codex usage is now read from the official page (browser) only. The
+  local logs update only for Codex CLI requests, so with the Codex/ChatGPT apps
+  the values looked frozen. `codex_usage.py`, the `Codex data source` and Spark
+  menu items and the `old record` marker went with it; those values in older
+  settings files are ignored.
+- The clean-up of the pre-0.1.0 standalone widgets (Claude-only, Codex-only) and
+  `cleanup-legacy.cmd`.
+- The no longer updated `HISTORY.md` and the unused `assets/screenshot.svg`.
 
 ## [0.9.0] - 2026-10-27
 
@@ -191,6 +338,89 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
     잡지 않게 했습니다. 제목 표시줄 배지 프로세스도 같습니다.
   - 위젯을 끌 때 **Claude용·Codex용 Chrome을 둘 다** 닫습니다.
 
+### English
+
+First official release. Changes since 0.8.x:
+
+#### Added
+- **Display mode choice and usage badges on the app title bars**: pick one of
+  three in **`Display`** in the right-click and notification-icon menus.
+  - **Widget only**: the floating widget, as before.
+  - **Title-bar badges only**: the widget stays hidden and usage shows only as
+    badges on the Claude and Codex app windows. The widget does not appear when
+    an app starts, nor from the notification icon, desktop shortcut or a badge;
+    it comes back **only when `Display` is changed**. Only running apps are
+    synced.
+  - **Widget + title-bar badges** (default): both.
+- Badges sit on the title bars of the Claude and Codex (ChatGPT) app windows
+  without covering the app's buttons (left of Claude's toolbar; left of the
+  –/□/× buttons for Codex) and show each limit's **usage %, a thin bar and the
+  time until reset**, in the widget's colours (orange from 75%, red from 90%).
+  - They are windows "owned" by the app window, so **they follow it when it
+    moves, are covered with it, and hide when it is minimised.**
+  - Date-style reset times from the Codex page (`2026. 10. 24. 오후 5:10`) are
+    shown as **time left** (`2일 2시간 후`).
+  - Dragging a badge remembers its place per app (even across display scales);
+    right-click → `Reset badge position` puts it back. Double-clicking opens the
+    widget (except in badges-only mode).
+  - They are drawn by a separate DPI-aware helper process (`title_badges.py`) so
+    they line up at 125%/150% scaling, and it exits with the widget. It reads
+    only the usage cache the widget already saved and never touches the apps,
+    cookies or tokens.
+
+#### Fixed
+- **`install.cmd` failed on a first pywin32 install**: right after installing
+  pywin32, the same run could not find `pywintypes` ("pywin32 still could not be
+  loaded"). The pywin32 paths are now loaded right after install, so it works in
+  one go.
+- **The Claude badge covered the app's share and folder buttons**: the Claude app
+  has its own toolbar left of –/□/×, so the default spot moved left of it.
+- **Codex badge text was cut off on the right**: widths were measured with Segoe
+  UI, which has no Hangul, so Korean came out narrower than drawn. Korean is now
+  measured and drawn with Malgun Gothic.
+- **Codex limit names and reset text**: when the page runs them together, as in
+  `주간 사용 한도6일 16시간 후 초기화됩니다`, the name (`주간 한도`) and the time are
+  split and `초기화됩니다` is shortened to `초기화`; trailing text such as `37% 남음` is
+  dropped. Badge time-left text also ends in `초기화`.
+- **The program folder could not be deleted after closing the widget (remaining
+  cause)**: the Startup watcher and the widget used the program folder as their
+  working folder. Shortcuts and every process now run from the data folder
+  (`%LOCALAPPDATA%\ClaudeCodexUsage`), so the folder can be deleted right after
+  exiting.
+- **Uninstall left things behind**: `uninstall.cmd` and the menu's uninstall now
+  wait until the widget and watcher have really exited, close leftover dedicated
+  Chrome and this app's Python processes, and then delete. Locked files are
+  retried in the background for up to a minute, and old standalone-widget
+  shortcuts are removed too.
+- **Text looked dim**: names (session, weekly) and reset times in the widget and
+  badges are white instead of grey, and the blue for usage % is a little deeper.
+- **English mode was only partly English**: reset times read from the Claude and
+  ChatGPT pages (`2시간 후 재설정`, `(월) 오전 8:00`, `2026. 10. 24. 오후 5:10 초기화`) and
+  Codex limit names (`주간 사용 한도`) are shown in the widget's language. Reader
+  errors, the uninstall notice and installer messages follow the language too.
+- **The widget reappeared in `Title-bar badges only`**: the notification icon,
+  desktop shortcut and badge double-click no longer show it; it reappears only
+  when `Display` changes. In this mode the widget-only items of the
+  notification-icon menu (always on top, reset position, show/hide, arrows view)
+  are greyed out, and the badge menu's `Open widget` is gone.
+- **`Claude only` / `Codex only` could not be chosen in badges-only mode**: the
+  view mode now applies to badges too, showing and syncing only the chosen app.
+- **Badge text clipping**: the badge height comes from the fonts' real line
+  heights, so the bottom reset line is not cut off, and the text is a little
+  smaller to fit the ~40 px title bar.
+- **Reset-time clean-up**: however long the page's text, only the time part such
+  as `1시간 20분 후` or `(월) 오전 8:00` is shown; `(월요일)` becomes `(월)`.
+- **Codex badge names**: `5시간 한도` becomes `Session`, and a bare `한도` gets
+  `Weekly` when the reset text says so.
+- **The folder could not be deleted after closing the program**: the dedicated
+  Claude and Codex Chrome kept the program folder as their working folder, so
+  Windows blocked deleting or replacing it, and closing the widget closed only
+  Claude's Chrome, not Codex's.
+  - Dedicated Chrome now starts in the app data folder
+    (`%LOCALAPPDATA%\ClaudePet`) so it never holds the program folder; the
+    title-bar badge process does the same.
+  - Closing the widget closes **both** dedicated Chrome instances.
+
 ## [0.8.4] - 2026-10-05
 
 ### Fixed
@@ -206,6 +436,24 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
 ### Added
 - 우클릭·알림 아이콘 메뉴에 **`위치 초기화 (시계 위로)`** 추가 — 기본 위치로 복귀.
 
+### English
+
+#### Fixed
+- **A moved widget jumped back above the taskbar clock**: placement was always
+  limited to the **primary monitor's** work area, so on another monitor every
+  sync or redraw pulled it back, and the moved position was not saved, so each
+  start returned to the default place.
+  - Placement is now limited to **the monitor the widget is on**, so it stays on
+    a secondary monitor.
+  - A dragged position is saved in `settings.json` and **kept across restarts
+    and reboots**.
+  - If that monitor is disconnected, the widget returns to the default place on
+    the primary monitor.
+
+#### Added
+- **`Reset position`** in the right-click and notification-icon menus, back to
+  the default place.
+
 ## [0.8.3] - 2026-09-29
 
 ### Fixed
@@ -215,6 +463,15 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   동기화되는 `문서` 폴더 등에 두면 `FileNotFoundError`로 동기화가 실패했습니다. 이제
   **문서함(OneDrive)에 둬도 정상 동작**합니다.
 
+### English
+
+#### Fixed
+- **Works when installed in a read-only or OneDrive folder**: the result caches
+  (`latest.json`, `codex_latest.json`) and `error.log` are written to
+  **`%LOCALAPPDATA%\ClaudeCodexUsage` instead of the program folder**. Writing to
+  the program folder made syncing fail with `FileNotFoundError` in a folder such
+  as an OneDrive-synced `Documents`; **such folders work now**.
+
 ## [0.8.2] - 2026-09-29
 
 ### Changed
@@ -223,6 +480,16 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   폴더 자체까지 삭제**합니다(되돌릴 수 없음). 실행 중인 폴더는 자기 자신을 못 지우므로,
   종료 후 별도 프로세스가 잠금이 풀리면 삭제합니다. OneDrive의 한글 폴더 같은
   비ASCII 경로도 안전하게 지워지도록 Python으로 처리합니다.
+
+### English
+
+#### Changed
+- **Menu order**: `Uninstall` moved **above** `Show / Hide`.
+- **Thorough uninstall**: `Uninstall` now deletes **the program folder itself**
+  as well as shortcuts, settings and sign-in data (cannot be undone). A running
+  folder cannot delete itself, so a separate process deletes it once the lock is
+  released after exit. Deletion is done in Python so non-ASCII paths, such as a
+  Korean OneDrive folder, are removed safely.
 
 ## [0.8.1] - 2026-09-29
 
@@ -235,6 +502,18 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
     해결책.
   - **다시 로그인**: 로그인(브라우저) 창을 다시 엽니다(세션 만료 시).
   - 현재 화면에 보이는 소스(Claude/Codex, 스택뷰면 둘 다)에 적용됩니다.
+
+### English
+
+#### Added
+- **Fix sync issues from the widget**: a **`Fix sync issues`** submenu in the
+  right-click and notification-icon menus repairs things without cmd.
+  - **Retry now**: force a resync.
+  - **Restart reader browser**: close the reader browser (`--close`) and sync
+    again; the main fix when a hidden browser stalls on throttling or Cloudflare
+    and shows `Sync failed (timed out)`.
+  - **Re-sign in**: open the sign-in (browser) window again (expired session).
+  - These apply to the sources on screen (Claude/Codex, both in the stacked view).
 
 ## [0.8.0] - 2026-09-15
 
@@ -275,6 +554,50 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   Cloudflare's check and hang. It now reuses an already-loaded page (refreshing in
   place) instead of reloading, and retries the sync once so a cold first load can
   self-recover.
+
+### English
+
+#### Added
+- **Version in the widget**: the current version (`v0.8.0`) appears in small type
+  under the title (USAGE).
+- **Uninstall menu item**: **`Uninstall`** in the right-click and
+  notification-icon menus. After confirmation it stops the widget and watcher,
+  closes the dedicated browsers and **removes the shortcuts, settings and sign-in
+  data** (the program folder itself stays). `uninstall.cmd` does the same.
+- **Codex data source choice (default: official page / browser)**: a
+  **`Codex data source`** submenu with `Official page (browser)` and
+  `Local CLI logs`.
+  - **Official page (default):** like Claude, a dedicated browser reads the
+    ChatGPT usage page, showing **the real limits including ChatGPT app and web
+    usage** (e.g. 68% of the week used). Reading only local CLI logs missed app
+    and web usage, so values went stale; this fixes that. A one-time ChatGPT
+    sign-in is needed (separate profile from Claude); cookies and tokens are not
+    read, only the rendered values. Values the page shows as `remaining` are
+    converted to **usage** so the widget is consistent.
+  - **Local CLI logs:** the previous way, reading only `~/.codex` logs with no
+    sign-in. The Spark toggle works in this mode.
+- **Codex Spark usage toggle**: **`Also show Codex Spark usage`** in the
+  right-click and notification-icon menus (default **off**).
+  - **Off (default):** only the general Codex limits (current session, weekly).
+  - **On:** every bucket in use: general, Spark, or **both** (model buckets carry
+    a model tag, as in `Current session · Spark`, to tell them from the account
+    limits).
+  - "In use" means the bucket's latest record falls within its session window
+    (5 hours by default).
+
+#### Fixed
+- **Codex usage did not update**: in `0.7.0` the "exclude per-model buckets"
+  filter showed only the general (`codex`) bucket, so when **only a model-specific
+  limit is really used**, as with GPT-5.3-Codex-Spark, the general bucket went
+  stale (e.g. 25 hours old) and the widget froze on it as an "old record". Now,
+  even with Spark off, **Spark is shown automatically when the general bucket is
+  stale and only Spark is in use**, so the limit actually in use is always
+  current.
+- Claude "Official usage sync failed (timed out)" when idle: the reader reloaded
+  the usage page on every sync, and in the hidden window that reload could
+  re-trigger Cloudflare's check and hang. It now reuses an already-loaded page
+  (refreshing in place) instead of reloading, and retries the sync once so a
+  cold first load can self-recover.
 
 ## [0.7.0] - 2026-09-14
 
@@ -325,6 +648,22 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
     **부분 문자열(`claude`/`chatgpt`)** 매칭으로 바꿔, 빌드에 따라 실행 파일명이
     달라도 감지되게 했습니다(더블클릭 앱 열기와 동일한 방식).
 
+### English
+
+#### Fixed
+- **The widget did not show automatically when an app started**: the watcher was
+  never updated.
+  - `install.cmd` (install.py) now **stops this app's running widget and watcher
+    first** and then starts fresh ones. Before, the old watcher held its port
+    (47672) exclusively (EXCLUSIVEADDRUSE), so the new one failed to bind and
+    died, and re-running `install.cmd` left the old code running.
+  - The watcher retries binding its port for a few seconds at start, so it gets
+    past the short gap while a reinstall frees the port.
+  - Claude/ChatGPT desktop app detection uses **substring matching**
+    (`claude`/`chatgpt`) instead of the exact exe name (`chatgpt.exe`), so it
+    works when a build names its executable differently (as double-click app
+    opening already did).
+
 ## [0.6.1] - 2026-09-02
 
 ### Fixed
@@ -336,6 +675,18 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   닫습니다. 디버그 포트는 `--remote-allow-origins=http://localhost` origin 제한으로
   이미 보호되므로 보안 저하는 없습니다.
 
+### English
+
+#### Fixed
+- **Repeated sign-in regression**: the 0.5.0 change that closed the background
+  browser after every sync (`close_browser`) made each sync launch a new one, so
+  the Claude session was not kept (Claude refreshes its auth token, and the
+  refresh was lost on close). Signing in still showed "sign-in needed" and new
+  browser windows opened. The hidden browser is now **kept running** between
+  syncs and closed only when the widget exits. The debug port is already
+  protected by the `--remote-allow-origins=http://localhost` origin restriction,
+  so security is not reduced.
+
 ## [0.6.0] - 2026-09-02
 
 ### Added
@@ -346,6 +697,19 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   주간 한도 등)과 재설정 문구를 새 언어로 다시 생성합니다. 선택은 `settings.json`의
   `lang`에 저장됩니다.
   - Claude의 재설정 문구는 Claude 페이지에서 읽어 오므로 Claude 계정 언어를 따릅니다.
+
+### English
+
+#### Added
+- **Korean / English switch**: a **`Language`** submenu in the right-click
+  (anywhere on the window) and notification-icon menus: `한국어` / `English`.
+  Menu text (view modes, always on top, show/hide, exit…), the update badge and
+  status text are all translated. Switching makes the reader scripts
+  (`usage.py`, `codex_usage.py`) regenerate their labels (current session / all
+  models, weekly limit…) and reset text in the new language via `--lang`. The
+  choice is saved as `lang` in `settings.json`.
+  - Claude's reset text is read from the Claude page, so it follows the Claude
+    account's language.
 
 ## [0.5.0] - 2026-09-02
 
@@ -369,6 +733,34 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   화이트리스트로만 처리됩니다. 모든 외부 프로세스 실행은 셸 없이 argv 리스트로
   호출되고, 앱 실행 대상(AUMID·URL)은 하드코딩 상수입니다.
 
+### English
+
+#### Security
+- **Auto-update removed in favour of notifications**: the widget no longer
+  downloads and runs code on its own. At start it only checks read-only
+  (`git fetch`, no checkout), and when a newer version exists a red
+  **`● Update available`** badge appears in the header. Clicking it opens the
+  GitHub repository so you review and install it yourself (`git pull`, then
+  `install.cmd`). The check runs only when `origin` is the official HTTPS
+  repository and can be turned off with `CLAUDE_CODEX_NO_UPDATE=1` or a
+  `.noupdate` file. With no silent code execution, a compromised repository
+  cannot run arbitrary code.
+- **Browser debug port origin restriction**: `--remote-allow-origins=*` →
+  `http://localhost`, blocking malicious web pages from attaching to the DevTools
+  port (DNS rebinding and the like). The port stays loopback-only as before, and
+  the browser is closed after a sync so no port is left open.
+- **Codex log parsing hardening**: abnormally long rollout lines are skipped
+  before parsing (`MAX_LINE_CHARS`), so a corrupt or malicious file cannot
+  exhaust memory.
+- Added the security policy **`SECURITY.md`** and a security section in the
+  README.
+
+#### Notes
+- The control ports (UDP 47671/47672) stay loopback-only, handled with a 64-byte
+  cap and a fixed command allowlist. Every external process is started without a
+  shell, as an argv list, and app launch targets (AUMIDs, URLs) are hard-coded
+  constants.
+
 ## [0.4.0] - 2026-09-01
 
 ### Added
@@ -385,6 +777,22 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   띄웁니다. 감시자는 별도 프로세스라, 이 버전을 적용하려면 **`install.cmd`를 다시
   실행**하거나 재부팅해 최신 감시자로 교체해야 합니다.
 
+### English
+
+#### Added
+- **Auto view mode** (new default): the view follows the running apps. Only
+  Claude open → Claude usage only; only Codex (ChatGPT) → Codex only; both →
+  both (stacked). **Closing one leaves the other; closing both hides the window,
+  and opening an app again brings it back.** A fixed mode can still be chosen
+  from the tray, `▾` or right-click menu.
+- **Right-click anywhere on the window** shows the same menu as the tray
+  (taskbar) right-click (view mode · always on top · show/hide · exit).
+
+#### Changed
+- The background watcher shows the widget when the Claude or ChatGPT desktop app
+  starts. The watcher is a separate process, so **re-run `install.cmd`** or
+  reboot to replace it with the latest one.
+
 ## [0.3.0] - 2026-08-31
 
 ### Added
@@ -399,6 +807,21 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   **`cleanup-legacy.cmd`** 추가. 설치 시에도 자동으로 옛 시작/바탕화면 바로가기를
   제거해 부팅 시 옛 버전이 뜨지 않게 합니다.
 
+### English
+
+#### Added
+- Double-click **always opens the app**: a running Claude/ChatGPT desktop app is
+  focused, and a closed one is **launched directly** by AUMID
+  (`shell:AppsFolder`). (Both are Microsoft Store apps whose exe cannot be run
+  directly, hence the AUMID.) The website is used only when the app is not
+  installed.
+- **Show the widget when an app starts**: a background watcher shows the widget
+  when it sees the Claude/ChatGPT desktop app start. (It only checks the process
+  list every 2 seconds, so CPU and memory cost is negligible.)
+- **`cleanup-legacy.cmd`** to remove leftovers of the old standalone widgets
+  (claude-usage, codex-usage). Installing also removes their old Startup and
+  desktop shortcuts so old versions no longer start at boot.
+
 ## [0.2.0] - 2026-08-31
 
 ### Added
@@ -410,6 +833,19 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   ChatGPT와 ChatGPT Classic이 모두 켜져 있으면 ChatGPT를 우선하며, 둘 다 실행
   중이 아니면 사용량 페이지로 폴백합니다. (Claude 쪽은 설치돼 있으면 Claude 앱,
   없으면 claude.ai — 기존과 동일)
+
+### English
+
+#### Added
+- An **"Always on top"** toggle in the tray (taskbar notification) right-click
+  menu. Off, the widget can go behind other windows like a normal window; the
+  setting is saved.
+
+#### Changed
+- Double-clicking the Codex side opens the **running ChatGPT app** instead of the
+  usage page. With both ChatGPT and ChatGPT Classic running, ChatGPT wins; with
+  neither running it falls back to the usage page. (The Claude side opens the
+  Claude app if installed, otherwise claude.ai, as before.)
 
 ## [0.1.0] - 2026-08-31
 
@@ -425,6 +861,23 @@ All notable changes to Claude Codex Usage are documented here. Versions follow
   읽는 로컬 리더(브라우저·로그인 불필요, `--self-test` 지원).
 - 더블클릭 시 클릭한 쪽에 맞는 앱(Claude 앱 / Codex 사용량 페이지)이 열림.
 - 반투명 창(불투명도 약 85%), 창을 옮겨 둔 경우 높이 변화 시 아래 모서리 고정.
+
+### English
+
+First version: `claude-usage` and `codex-usage` combined into one widget.
+
+#### Added
+- **Claude and Codex usage together** in one widget.
+- Four view modes (default **Both**): both stacked / both with left-right arrows
+  / Claude only / Codex only. Picked with the `▾` button between `↻` and `×` or
+  the tray right-click; the choice is saved.
+- `usage.py`: a reader for Claude's official Usage page in a dedicated browser.
+- `codex_usage.py`: a local reader of the rate-limit snapshots the Codex CLI
+  leaves in `~/.codex/sessions` (no browser or sign-in, `--self-test` supported).
+- Double-click opens the matching app for the side clicked (Claude app / Codex
+  usage page).
+- A translucent window (about 85% opacity) that keeps its bottom edge in place
+  when its height changes after being moved.
 
 [0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.2
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.1
