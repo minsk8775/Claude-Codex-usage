@@ -1243,7 +1243,9 @@ class UsageApp:
             key = source["key"]
             try:
                 script = source["script"]
-                result = run_script(script, "--sync", "--lang", lang)
+                # Each reader may try twice, each waiting for the page to load
+                # (up to ~45 s), so give it more than the default minute.
+                result = run_script(script, "--sync", "--lang", lang, timeout=100)
                 if result.returncode:
                     log_error(
                         "%s sync exit=%d %s" % (key, result.returncode, result.stderr)

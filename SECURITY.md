@@ -81,9 +81,11 @@ the old dedicated usage browser may need to be closed manually once after an
 upgrade. The interactive sign-in browser is not automatically terminated.
 
 ### Local control ports are loopback-only with a fixed command set
-The widget and its background watcher accept small UDP control messages on
-`127.0.0.1:47671` / `47672`. The widget accepts only the exact ASCII commands
-`show`, `autoshow`, and `exit`; the watcher accepts only `exit`. Internal
+The widget, its background watcher and the title-bar badge helper accept small
+UDP control messages on `127.0.0.1:47671` / `47672` / `47673`. The widget accepts
+only the exact ASCII commands `show`, `autoshow`, `menu` (a right-clicked badge
+asks for the menu) and `exit`; the watcher accepts only `exit`; the badge helper
+accepts only `reset` (put the badges back in their default place). Internal
 worker events such as `sync_result` cannot be injected through these sockets.
 Malformed and oversized messages are discarded. The widget's queue and the
 number of events handled per UI tick are bounded. Commands are never passed to a
@@ -95,6 +97,13 @@ the target apps) is started with an argument **list**, never `shell=True` and ne
 a shell string. App launch targets (AUMIDs and fallback URLs) are hard-coded
 constants, so no untrusted value reaches a command line.
 
+### Installing Python runs only signed, official installers
+When neither uv nor Python is found, `install.cmd` installs Python 3.12 for the
+current user with `winget` (Windows' package manager), or else downloads the
+official installer from `https://www.python.org` over HTTPS. The downloaded file
+is run only after Windows confirms a valid Authenticode signature from the
+Python Software Foundation; otherwise it is deleted and nothing is installed.
+
 ### Secrets stay out of Git
 `.gitignore` excludes the generated snapshots (`latest.json`, `codex_latest.json`),
 `error.log`, and `.credentials.json` / `*.local.*`. The dedicated profile lives
@@ -104,14 +113,18 @@ not a substitute for checking what is being committed.
 ## Residual risks (accepted)
 
 - **Local processes can send control messages.** Any process running as your user
-  can send `show`/`autoshow`/`exit` UDP packets to the loopback control
-  ports. Impact is limited to showing or closing the widget — no data
-  exfiltration and no code execution. Defending against same-user local processes
+  can send `show`/`autoshow`/`menu`/`exit`/`reset` UDP packets to the loopback
+  control ports. Impact is limited to showing or closing the widget, opening its
+  menu, or moving the badges back — no data exfiltration and no code execution. Defending against same-user local processes
   is out of scope for a user-level widget.
 - **DevTools and the browser profile require local trust.** A process running as
   your user can attach to the dedicated browser or read its profile. Origin
   checks and process-identity checks do not protect against a hostile program
   that can already modify your files. Do not use this profile for other browsing.
+  The loopback interface is shared by everyone signed in to the same PC, so on a
+  PC with other (untrusted) Windows accounts, those accounts could also reach the
+  debug port while the reader browser runs. Use the app on a PC you do not share,
+  or stop it (`Exit`) while others are signed in.
 - **The host is trusted.** The app uses only the Python standard library and
   Windows' own components (installation creates its shortcuts through the Windows
   shell-link interface, via ctypes).

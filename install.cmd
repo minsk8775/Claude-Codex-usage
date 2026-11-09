@@ -51,12 +51,18 @@ if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "CLAUDE_USAGE_ARCH=arm64"
 set "CLAUDE_USAGE_SETUP=%TEMP%\python-3.12.10-%CLAUDE_USAGE_ARCH%.exe"
 echo Downloading Python 3.12 from python.org...
 curl.exe -fL --retry 2 -o "%CLAUDE_USAGE_SETUP%" "https://www.python.org/ftp/python/3.12.10/python-3.12.10-%CLAUDE_USAGE_ARCH%.exe"
-if not errorlevel 1 (
-  echo Installing Python 3.12 for this user. This can take a minute...
-  "%CLAUDE_USAGE_SETUP%" /quiet InstallAllUsers=0 PrependPath=1 Include_tcltk=1 Include_test=0
+if errorlevel 1 goto no_python
+rem Run it only if Windows confirms it is signed by the Python Software Foundation.
+powershell -NoProfile -NonInteractive -Command "$s = Get-AuthenticodeSignature -LiteralPath $env:CLAUDE_USAGE_SETUP; if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Python Software Foundation') { exit 1 }"
+if errorlevel 1 (
+  echo The downloaded Python installer is not signed by the Python Software Foundation; it was not run.
   del "%CLAUDE_USAGE_SETUP%" >nul 2>nul
-  call :find_python
+  goto no_python
 )
+echo Installing Python 3.12 for this user. This can take a minute...
+"%CLAUDE_USAGE_SETUP%" /quiet InstallAllUsers=0 PrependPath=1 Include_tcltk=1 Include_test=0
+del "%CLAUDE_USAGE_SETUP%" >nul 2>nul
+call :find_python
 if defined CLAUDE_USAGE_PY goto run_python
 
 echo.

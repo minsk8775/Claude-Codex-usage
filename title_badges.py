@@ -24,7 +24,7 @@ import re
 import socket
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
@@ -56,6 +56,7 @@ BORDER = "#3B3B48"
 TRACK = "#3A3A48"
 DIM = "#FFFFFF"     # labels (세션·주간)
 FAINT = "#F2F2F7"   # reset time line
+STALE = "#8A8A99"   # numbers from a sync that is too old to trust
 WARN = "#F1707B"
 TRANSPARENT = "#010203"
 
@@ -194,6 +195,25 @@ def short_reset(sub, lang="ko", now=None):
     return line.strip()[:18]
 
 
+STALE_SECONDS = 10 * 60  # syncs run every 2 minutes
+
+
+def is_stale(data, now=None):
+    """True when the cached numbers were read too long ago to trust: the
+    readers have been failing (timeouts do not rewrite the cache) or the widget
+    stopped syncing. Unknown age counts as stale."""
+    try:
+        synced = datetime.fromisoformat(str(data.get("synced_at")))
+    except (TypeError, ValueError):
+        return True
+    if synced.tzinfo is None:
+        synced = synced.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.astimezone(timezone.utc)
+    return (now - synced).total_seconds() > STALE_SECONDS
+
+
 def columns(data, lang="ko", now=None):
     """Turn a reader cache into at most two badge columns."""
     if not isinstance(data, dict):
@@ -204,6 +224,7 @@ def columns(data, lang="ko", now=None):
     if data.get("error") or not bars:
         return [{"warn": True, "label": tr(lang, "failed") if data.get("error") else tr(lang, "syncing")}]
     result = []
+    stale = is_stale(data)
     for bar in bars[:2]:
         try:
             pct = max(0.0, min(float(bar.get("pct") or 0), 100.0))
@@ -215,6 +236,7 @@ def columns(data, lang="ko", now=None):
             "pct": pct,
             "pct_text": str(bar.get("pct_text") or "%g%%" % pct),
             "reset": short_reset(bar.get("sub"), lang, now),
+            "stale": stale,
         })
     return result
 
@@ -456,7 +478,8 @@ class Badge:
                                    fill=WARN, font=label_font)
                 x += col_width + int(COL_GAP * s)
                 continue
-            color = level_color(col["pct"])
+            # Old numbers are drawn grey so they are not taken as current.
+            color = STALE if col.get("stale") else level_color(col["pct"])
             y1 = y_label
             canvas.create_text(x, y1, text=col["label"], anchor="nw", fill=DIM, font=label_font)
             canvas.create_text(x + col_width, y1, text=col["pct_text"], anchor="ne",

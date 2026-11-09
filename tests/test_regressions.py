@@ -195,6 +195,19 @@ class BadgeTargetTests(unittest.TestCase):
         badge.refresh.assert_called_once_with("ko")
 
 
+class StaleUsageTests(unittest.TestCase):
+    def test_old_numbers_are_marked_stale(self):
+        # A reader killed by its timeout leaves the last good cache behind; the
+        # badge must not present it as current usage.
+        from datetime import timedelta, timezone
+        now = datetime.now(timezone.utc)
+        fresh = {"synced_at": (now - timedelta(minutes=3)).isoformat(), "bars": [{"pct": 12, "label": "주간 한도"}]}
+        old = {"synced_at": (now - timedelta(minutes=30)).isoformat(), "bars": [{"pct": 8, "label": "주간 한도"}]}
+        self.assertFalse(badges.columns(fresh)[0]["stale"])
+        self.assertTrue(badges.columns(old)[0]["stale"])
+        self.assertTrue(badges.is_stale({"bars": []}))  # unknown age
+
+
 class BadgeCommandTests(unittest.TestCase):
     def test_widget_menu_can_reset_every_badge_position(self):
         lock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -227,6 +240,16 @@ class CodexWebTests(unittest.TestCase):
             web.refresh_usage(devtools)
         devtools.call.assert_any_call("Page.navigate", {"url": web.CODEX_USAGE_URL})
         self.assertEqual(devtools.evaluate.call_count, 3)
+
+    def test_loading_settings_page_is_not_mistaken_for_sign_in(self):
+        devtools = Mock()
+        loading = {"url": "https://chatgpt.com/settings/usage?tab=overview", "body": "보안 · 로그인 설정"}
+        with patch.object(web, "read_page", side_effect=[loading, {"blocks": WEB_FIXTURE_BLOCKS}]), \
+                patch.object(web.time, "sleep"):
+            self.assertTrue(web.wait_for_usage(devtools)["blocks"])
+        signed_out = {"url": "https://chatgpt.com/", "body": "로그인 회원 가입"}
+        with patch.object(web, "read_page", return_value=signed_out), self.assertRaises(web.NeedsLogin):
+            web.wait_for_usage(devtools)
 
     def test_page_without_usage_reports_what_it_showed(self):
         devtools = Mock()

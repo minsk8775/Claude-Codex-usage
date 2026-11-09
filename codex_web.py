@@ -231,9 +231,14 @@ def wait_for_usage(devtools):
             return last
         body = (last.get("body") or "").lower()
         url = (last.get("url") or "").lower()
+        # Signed out, ChatGPT leaves the settings page (for its home page or the
+        # sign-in pages). While still on /settings/ the account is signed in and
+        # the page is just loading; its text can say "로그인" (e.g. login
+        # settings), which must not end the session.
+        signed_out_words = ("log in" in body or "sign in" in body or "로그인" in body
+                            or "continue with" in body or "이메일로 계속" in body)
         if ("/auth" in url or "/login" in url or "login.openai" in url
-                or "log in" in body or "sign in" in body or "로그인" in body
-                or "continue with" in body or "이메일로 계속" in body):
+                or ("/settings" not in url and url.startswith("http") and signed_out_words)):
             raise NeedsLogin(usage.t("ChatGPT 로그인이 필요합니다", "ChatGPT sign-in is needed"))
         time.sleep(0.5)
     error = SyncError(usage.t("사용 한도를 읽지 못했습니다", "Could not read the usage limits"))
