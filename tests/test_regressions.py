@@ -780,6 +780,19 @@ class WidgetTests(unittest.TestCase):
         self.assertEqual(version, widget.APP_VERSION)
         self.assertEqual(widget.UNINSTALL_KEY, installer.UNINSTALL_KEY)
 
+    def test_widget_greys_out_old_numbers_like_the_badges(self):
+        app = self.app()
+        app.canvas = Mock()
+        app.width, app.scale = 192, 1.0
+        bar = {"pct": 50, "pct_text": "50%", "label": "주간", "sub": ""}
+        app._draw_bar(10, 10, bar, stale=True)
+        fills = {call.kwargs.get("fill") for call in app.canvas.create_text.call_args_list}
+        self.assertIn(widget.STALE, fills)
+        app.canvas.reset_mock()
+        app._draw_bar(10, 10, bar)
+        fills = {call.kwargs.get("fill") for call in app.canvas.create_text.call_args_list}
+        self.assertNotIn(widget.STALE, fills)
+
     def test_quit_turns_auto_start_off_and_close_does_not(self):
         app = self.app()
         app.exit = Mock()

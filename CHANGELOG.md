@@ -8,6 +8,27 @@ English only).
 이 프로젝트의 모든 주요 변경 사항을 적습니다. 버전마다 한국어 다음에 영어로 적습니다
 (0.7.0은 영어로만 적혀 있습니다).
 
+## [Unreleased]
+
+### Changed
+- **위젯도 오래된 숫자를 회색으로 표시합니다**: 배지처럼, 3분 넘게 갱신되지 않은 숫자(켤 때
+  보이는 이전 캐시, 계속 실패하는 동기화)는 회색입니다.
+- `설치된 앱`의 조용한 제거(`--uninstall --quiet`)를 지원합니다. 확인·완료 창 없이 지웁니다.
+- GitHub의 Windows 테스트가 실제로 설치한 뒤 조용히 제거하고, 바로가기·설치된 앱 항목·
+  설정·로그인 정보·프로그램 폴더·실행 중인 프로세스가 하나도 남지 않는지 확인합니다.
+
+### English
+
+#### Changed
+- **The widget greys out old numbers too**: as on the badges, numbers not
+  refreshed for over 3 minutes (the cache shown at start, syncs that keep
+  failing) are drawn grey.
+- Quiet uninstall from `Installed apps` (`--uninstall --quiet`), with no
+  confirmation or completion dialog.
+- The Windows tests on GitHub now really install the app, remove it with the
+  quiet uninstaller and check that no shortcut, Installed apps entry, settings,
+  sign-in data, program folder or running process is left.
+
 ## [0.9.2] - 2026-11-09
 
 ### Changed

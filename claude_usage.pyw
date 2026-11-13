@@ -21,7 +21,7 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox
 
-from title_badges import level_color, rounded as rounded_rectangle  # same look as the badges
+from title_badges import STALE, is_stale, level_color, rounded as rounded_rectangle  # same look as the badges
 
 from usage import atomic_json
 
@@ -1203,6 +1203,7 @@ class UsageApp:
 
     def _scheduled_sync(self):
         if not self.exiting:
+            self._draw()  # numbers turn grey once they are too old (see _draw_bar)
             self._update_badges()  # restart the badge helper if it died
             self.start_sync(False)
             self.root.after(120000, self._scheduled_sync)
@@ -1595,10 +1596,12 @@ class UsageApp:
                 outline="",
             )
 
-    def _draw_bar(self, pad, row_y, bar):
-        """Draw one usage bar (label, percent, track/fill, reset text) at row_y."""
+    def _draw_bar(self, pad, row_y, bar, stale=False):
+        """Draw one usage bar (label, percent, track/fill, reset text) at row_y.
+        Numbers from a sync that is too old to trust are drawn grey, as on the
+        badges (e.g. the cache shown at start, or readers that keep timing out)."""
         pct = max(0.0, min(float(bar.get("pct", 0)), 100.0))
-        color = level_color(pct)
+        color = STALE if stale else level_color(pct)
         self.canvas.create_text(
             pad, row_y, text=str(bar.get("label", "")), anchor="w",
             fill="#FFFFFF", font=self._font(10, "bold"),
@@ -1702,8 +1705,9 @@ class UsageApp:
             )
             return
 
+        stale = is_stale(self.data)
         for index, bar in enumerate(bars):
-            self._draw_bar(pad, self._s(self.ROW_TOP + index * self.ROW_STEP), bar)
+            self._draw_bar(pad, self._s(self.ROW_TOP + index * self.ROW_STEP), bar, stale)
 
     def _measure_stacked(self):
         self.width = self._s(self.BASE_WIDTH)
@@ -1744,8 +1748,9 @@ class UsageApp:
             data = self.datas.get(source["key"]) or {}
             bars = (data.get("bars") or [])[:BAR_CAP[source["key"]]]
             if bars and not data.get("error"):
+                stale = is_stale(data)
                 for bar in bars:
-                    self._draw_bar(pad, self._s(row + 10), bar)
+                    self._draw_bar(pad, self._s(row + 10), bar, stale)
                     row += self.STACK_BAR
             else:
                 self.canvas.create_text(
@@ -2295,7 +2300,9 @@ def uninstall():
         lang = None
     lang = lang if lang in LANGS else DEFAULT_LANG
     # Started from Settings > Apps (or uninstall.cmd): ask before deleting.
-    if "--yes" not in sys.argv:
+    # --quiet (Windows' quiet uninstall, and the CI test) asks and tells nothing.
+    quiet = "--quiet" in sys.argv
+    if not quiet and "--yes" not in sys.argv:
         root = tk.Tk()
         root.withdraw()
         confirmed = messagebox.askyesno(tr(lang, "uninstall_confirm_title"), tr(lang, "uninstall_confirm"))
@@ -2330,10 +2337,11 @@ def uninstall():
         if not STATE_DIR.exists() and not BROWSER_DATA_DIR.exists():
             break
         time.sleep(1)
-    root = tk.Tk()
-    root.withdraw()
-    messagebox.showinfo("Claude Codex Usage", tr(lang, "uninstall_done"))
-    root.destroy()
+    if not quiet:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo("Claude Codex Usage", tr(lang, "uninstall_done"))
+        root.destroy()
     # Remove the program files after we exit and release them.
     schedule_self_delete(*program_targets(), STATE_DIR, BROWSER_DATA_DIR)
 

@@ -147,6 +147,7 @@ def register_uninstaller(pythonw):
             ("InstallLocation", str(BASE_DIR)),
             ("URLInfoAbout", "https://github.com/minsk8775/claude-codex-usage"),
             ("UninstallString", '"%s" "%s" --uninstall' % (pythonw, APP_SCRIPT)),
+            ("QuietUninstallString", '"%s" "%s" --uninstall --quiet' % (pythonw, APP_SCRIPT)),
         ):
             winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
         for name in ("NoModify", "NoRepair"):

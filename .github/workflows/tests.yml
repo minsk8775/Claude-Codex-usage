@@ -19,3 +19,42 @@ jobs:
           python-version: "3.12"
       - name: Offline regression tests
         run: python -m unittest discover -s tests -v
+      - name: Install and uninstall (smoke test)
+        # Installs a copy (uninstall deletes its program folder), checks what
+        # the installer creates, then removes it with the quiet uninstaller and
+        # checks that nothing is left behind.
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = Join-Path $env:RUNNER_TEMP "ccu app 문서"
+          New-Item -ItemType Directory -Path $app | Out-Null
+          Copy-Item -Recurse -Force -Path (Join-Path $PWD "*") -Destination $app
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $links = @(
+            (Join-Path $desktop "Claude Codex Usage.lnk"),
+            (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\Claude Codex Usage Watcher.lnk")
+          )
+          $entry = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCodexUsage"
+          $data = @((Join-Path $env:LOCALAPPDATA "ClaudeCodexUsage"), (Join-Path $env:LOCALAPPDATA "ClaudePet"))
+
+          python (Join-Path $app "install.py")
+          if ($LASTEXITCODE) { throw "install.py failed" }
+          foreach ($path in $links) { if (-not (Test-Path $path)) { throw "missing shortcut: $path" } }
+          $quiet = (Get-ItemProperty $entry).QuietUninstallString
+          if (-not $quiet) { throw "missing Installed apps entry" }
+          Start-Sleep -Seconds 10  # let the widget and watcher start
+
+          python (Join-Path $app "claude_usage.pyw") --uninstall --quiet
+          # The program folder is deleted by a helper after the uninstaller
+          # exits; wait for it, and for every process of this copy to end.
+          $leftover = @(); $running = @()
+          foreach ($second in 1..120) {
+            $leftover = @($links + $data + $app | Where-Object { Test-Path -LiteralPath $_ })
+            if (Test-Path $entry) { $leftover += $entry }
+            $running = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($app) })
+            if (-not $leftover -and -not $running) { break }
+            Start-Sleep -Seconds 1
+          }
+          if ($leftover) { throw "left behind: $($leftover -join ', ')" }
+          if ($running) { throw "still running: $($running.CommandLine -join ' | ')" }
+          "Install and uninstall left nothing behind."
