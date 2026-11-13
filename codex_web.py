@@ -22,6 +22,7 @@ import time
 from datetime import datetime, timezone
 
 import usage  # reuse the browser/CDP plumbing
+from title_badges import reset_clock, reset_date  # Claude-style reset time
 
 # The usage page's Overview tab, where the Codex/Work limits are shown. The
 # older analytics URL now redirects to the "?tab=analytics" tab, which has none.
@@ -203,13 +204,21 @@ def make_payload(data):
         parsed = parse_block(block)
         if parsed is None:
             continue
-        sub = usage.localize_reset(parsed["reset"], LANG)
-        bars.append({
+        bar = {
             "label": normalize_label(parsed["label"]),
             "pct": parsed["used"],
             "pct_text": "%g%%" % parsed["used"],
-            "sub": sub,
-        })
+        }
+        # The page gives a date ('2026. 9. 19. 오후 5:10'); show it the way
+        # Claude shows its weekly reset: '(토) 오후 5:10에 초기화'.
+        target = reset_date(parsed["reset"])
+        if target is not None:
+            clock = reset_clock(target, LANG)
+            bar["sub"] = "Resets " + clock if LANG == "en" else clock + "에 초기화"
+            bar["reset_at"] = target.isoformat(timespec="minutes")  # for the badges
+        else:
+            bar["sub"] = usage.localize_reset(parsed["reset"], LANG)
+        bars.append(bar)
     if not bars:
         raise SyncError(usage.t("사용 한도를 페이지에서 찾지 못했습니다", "No Codex usage found on the page"))
     return {

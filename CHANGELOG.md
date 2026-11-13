@@ -13,6 +13,10 @@ English only).
 ### Changed
 - **위젯도 오래된 숫자를 회색으로 표시합니다**: 배지처럼, 3분 넘게 갱신되지 않은 숫자(켤 때
   보이는 이전 캐시, 계속 실패하는 동기화)는 회색입니다.
+- **Codex 초기화 시간을 Claude처럼 요일과 시각으로 보여 줍니다**: 사용량 페이지의 날짜
+  (`2026. 10. 24. 오후 5:10`)를 남은 시간(`2일 2시간 후`) 대신 Claude의 주간 초기화처럼
+  `(토) 오후 5:10`으로 보여 줍니다(위젯은 `(토) 오후 5:10에 초기화`). 일주일 이상 남았으면
+  날짜도 붙입니다(`10/31 (토) 오후 5:10`). 영어는 `Sat 5:10 PM`.
 - **ZIP으로 설치해도 업데이트 알림이 뜹니다**: git이 없는 설치는 시작할 때 GitHub 최신 릴리스
   버전과 비교해(읽기만 함) 새 버전이면 `● 업데이트 필요` 배지를 띄우고, 누르면 릴리스
   페이지가 열립니다.
@@ -26,6 +30,10 @@ English only).
 - **The widget greys out old numbers too**: as on the badges, numbers not
   refreshed for over 3 minutes (the cache shown at start, syncs that keep
   failing) are drawn grey.
+- **Codex reset times look like Claude's: weekday and time**: the page's date
+  (`2026. 10. 24. 오후 5:10`) is shown as `Sat 5:10 PM` (`(토) 오후 5:10` in
+  Korean), like Claude's weekly reset, instead of time left (`in 2d 2h`). A reset
+  a week or more away also gets its date (`Sat Oct 31, 9:05 AM`).
 - **ZIP installs get update notices too**: without git, the widget compares
   its version with the latest GitHub release at startup (read-only) and shows
   the `● Update available` badge, which opens the release page.

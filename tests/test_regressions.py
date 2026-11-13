@@ -38,7 +38,8 @@ class BadgeTests(unittest.TestCase):
         cases = {
             "2시간 12분 후 재설정": "2시간 12분 후 초기화",
             "(월) 오전 8:00에 재설정": "(월) 오전 8:00",
-            "2026. 10. 24. 오후 5:10 초기화": "2일 2시간 후 초기화",
+            "2026. 10. 24. 오후 5:10 초기화": "(토) 오후 5:10",    # like Claude's weekly reset
+            "2026. 10. 31. 오전 9:05 초기화": "10/31 (토) 오전 9:05",  # a week or more away: with the date
             "2026. 10. 22. 오전 12:30 초기화": "곧 초기화",
             "기록 10/22 14:58\n3시간 후 재설정": "3시간 후 초기화",
             "(월요일) 오전 8:00에 재설정": "(월) 오전 8:00",
@@ -52,11 +53,17 @@ class BadgeTests(unittest.TestCase):
             "Resets in 2 hr 12 min": "in 2h 12m",
             "Resets in 6 d 16 hr": "in 6d 16h",
             "Resets Mon 8:00 AM": "Mon 8:00 AM",
-            "Resets Oct 24, 5:10 PM": "in 2d 2h",      # same form as a duration
-            "Resets Jan 2, 9:00 AM": "in 71d 18h",     # next year's January
+            "Resets Oct 24, 5:10 PM": "Sat 5:10 PM",   # like Claude's weekly reset
+            "Resets Jan 2, 9:00 AM": "Sat Jan 2, 9:00 AM",  # next year's January, far off
         }
         for sub, expected in english.items():
             self.assertEqual(badges.short_reset(sub, "en", self.NOW), expected, sub)
+
+    def test_codex_reset_moment_is_kept_for_the_badge(self):
+        bar = {"pct": 10, "sub": "(토) 오후 5:10에 초기화", "reset_at": "2026-10-24T17:10"}
+        self.assertEqual(badges.columns({"bars": [bar]}, "ko", self.NOW)[0]["reset"], "(토) 오후 5:10")
+        later = datetime(2026, 10, 24, 18, 0)
+        self.assertEqual(badges.columns({"bars": [bar]}, "ko", later)[0]["reset"], "곧 초기화")
 
     def test_labels_are_compact_and_keep_model_tags(self):
         self.assertEqual(badges.short_label("현재 세션"), "세션")
@@ -322,7 +329,7 @@ class CodexWebTests(unittest.TestCase):
         assert bar["label"] == "주간 한도", bar
         assert bar["pct"] == 65.0, bar          # 35% 남음 -> 65% 사용
         assert bar["pct_text"] == "65%", bar
-        assert "초기화" in bar["sub"], bar
+        assert bar["sub"] == "(토) 오후 5:10에 초기화", bar
 
         # English "used" wording is taken as used, not converted.
         used_block = web.parse_block(["Weekly limit", "42% used", "resets Sep 19"])
@@ -345,7 +352,8 @@ class CodexWebTests(unittest.TestCase):
         web.LANG = web.usage.LANG = "en"
         english = web.make_payload({"blocks": WEB_FIXTURE_BLOCKS})["bars"][0]
         assert english["label"] == "Weekly limit", english
-        assert english["sub"] == "Resets Sep 19, 5:10 PM", english
+        assert english["sub"] == "Resets Sat 5:10 PM", english  # like Claude's weekly reset
+        assert english["reset_at"] == "2026-09-19T17:10", english
         assert web.normalize_label("5시간 사용 한도") == "5-hour limit"
         web.LANG = web.usage.LANG = "ko"
         assert web.normalize_label("Weekly usage limit") == "주간 한도"

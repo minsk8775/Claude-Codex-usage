@@ -136,19 +136,14 @@ _KO_DATE = re.compile(
     r"(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})")
 
 
-def short_reset(sub, lang="ko", now=None):
-    """Compact reset text for the badge's bottom line.
+_WEEKDAYS_KO = "월화수목금토일"
+_WEEKDAYS_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-    Accepts the readers' sub-lines in either language: '2시간 12분 후 재설정' /
-    'Resets in 2 hr 12 min', '(월) 오전 8:00에 재설정' / 'Resets Mon 8:00 AM', and
-    dates such as '2026. 9. 19. 오후 5:10 초기화' / 'Resets Sep 19, 5:10 PM', which
-    are turned into time left ('2일 2시간 후 초기화' / 'in 2d 2h').
-    A multi-line sub-line uses its last line.
-    """
-    lines = [line.strip() for line in str(sub or "").splitlines() if line.strip()]
-    if not lines:
-        return ""
-    line = lines[-1]
+
+def reset_date(line, now=None):
+    """The reset moment in a date-style reset line ('2026. 9. 19. 오후 5:10' or
+    'Resets Sep 19, 5:10 PM', as the Codex page shows it), or None."""
+    now = now or datetime.now()
     match = _KO_DATE.search(line)
     if match:
         year, month, day, meridiem, hour, minute = match.groups()
@@ -158,25 +153,57 @@ def short_reset(sub, lang="ko", now=None):
         elif meridiem == "오전" and hour == 12:
             hour = 0
         try:
-            target = datetime(int(year), int(month), int(day), hour, int(minute))
+            return datetime(int(year), int(month), int(day), hour, int(minute))
         except ValueError:
-            target = None
-        if target is not None:
-            now = now or datetime.now()
-            return remaining_text((target - now).total_seconds(), lang)
+            return None
     match = _EN_DATE.search(line)
     if match:
         month, day, hour, minute, meridiem = match.groups()
         hour = int(hour) % 12 + (12 if meridiem.upper() == "PM" else 0)
-        now = now or datetime.now()
         try:
             target = datetime(now.year, _MONTHS.index(month[:3].lower()) + 1, int(day), hour, int(minute))
-            if target < now - timedelta(days=1):  # "Jan 2" seen in late December
-                target = target.replace(year=now.year + 1)
         except ValueError:
-            target = None
-        if target is not None:
-            return remaining_text((target - now).total_seconds(), lang)
+            return None
+        if target < now - timedelta(days=1):  # "Jan 2" seen in late December
+            target = target.replace(year=now.year + 1)
+        return target
+    return None
+
+
+def reset_clock(target, lang="ko", now=None):
+    """'(토) 오후 5:10' / 'Sat 5:10 PM', the way Claude shows its weekly reset.
+    A reset a week or more away also gets its date ('10/31 (토) 오후 5:10')."""
+    now = now or datetime.now()
+    hour = target.hour % 12 or 12
+    far = target - now >= timedelta(days=6)
+    if lang == "en":
+        clock = "%d:%02d %s" % (hour, target.minute, "PM" if target.hour >= 12 else "AM")
+        day = _WEEKDAYS_EN[target.weekday()]
+        if far:
+            day += " %s %d," % (_MONTHS[target.month - 1].title(), target.day)
+        return "%s %s" % (day, clock)
+    text = "(%s) %s %d:%02d" % (_WEEKDAYS_KO[target.weekday()],
+                                "오후" if target.hour >= 12 else "오전", hour, target.minute)
+    return ("%d/%d " % (target.month, target.day) + text) if far else text
+
+
+def short_reset(sub, lang="ko", now=None):
+    """Compact reset text for the badge's bottom line.
+
+    Accepts the readers' sub-lines in either language: '2시간 12분 후 재설정' /
+    'Resets in 2 hr 12 min', '(월) 오전 8:00에 재설정' / 'Resets Mon 8:00 AM', and
+    dates such as '2026. 9. 19. 오후 5:10 초기화' / 'Resets Sep 19, 5:10 PM', which
+    are shown like Claude's weekly reset ('(토) 오후 5:10' / 'Sat 5:10 PM').
+    A multi-line sub-line uses its last line.
+    """
+    lines = [line.strip() for line in str(sub or "").splitlines() if line.strip()]
+    if not lines:
+        return ""
+    line = lines[-1]
+    now = now or datetime.now()
+    target = reset_date(line, now)
+    if target is not None:
+        return tr(lang, "soon") if target <= now else reset_clock(target, lang, now)
     match = _EN_REL.search(line)
     if match:
         seconds = sum(int(number) * _EN_UNIT.get(unit[0].lower(), 0)
@@ -194,6 +221,17 @@ def short_reset(sub, lang="ko", now=None):
     line = re.sub(r"\s*(에\s*)?(재설정|초기화)\s*$", "", line)
     line = re.sub(r"^resets?\s+(in\s+)?", "", line, flags=re.IGNORECASE)
     return line.strip()[:18]
+
+
+def bar_reset(bar, lang="ko", now=None):
+    """A bar's reset line for the badge. Codex bars carry the exact moment
+    ('reset_at'), so a far-off date and "soon" stay right between syncs."""
+    try:
+        target = datetime.fromisoformat(str(bar.get("reset_at")))
+    except (TypeError, ValueError):
+        return short_reset(bar.get("sub"), lang, now)
+    now = now or datetime.now()
+    return tr(lang, "soon") if target <= now else reset_clock(target, lang, now)
 
 
 STALE_SECONDS = 3 * 60  # syncs run every 2 minutes
@@ -238,7 +276,7 @@ def columns(data, lang="ko", now=None):
             "label": short_label(bar.get("label"), lang),
             "pct": pct,
             "pct_text": str(bar.get("pct_text") or "%g%%" % pct),
-            "reset": short_reset(bar.get("sub"), lang, now),
+            "reset": bar_reset(bar, lang, now),
             "stale": stale,
         })
     return result
