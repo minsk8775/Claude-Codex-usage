@@ -210,11 +210,10 @@ def make_payload(data):
             "pct_text": "%g%%" % parsed["used"],
         }
         # The page gives a date ('2026. 9. 19. 오후 5:10'); show it the way
-        # Claude shows its weekly reset: '(토) 오후 5:10에 초기화'.
+        # Claude shows its weekly reset: '(토) 오후 5:10' / 'Sat 5:10 PM'.
         target = reset_date(parsed["reset"])
         if target is not None:
-            clock = reset_clock(target, LANG)
-            bar["sub"] = "Resets " + clock if LANG == "en" else clock + "에 초기화"
+            bar["sub"] = reset_clock(target, LANG)
             bar["reset_at"] = target.isoformat(timespec="minutes")  # for the badges
         else:
             bar["sub"] = usage.localize_reset(parsed["reset"], LANG)

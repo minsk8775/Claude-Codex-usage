@@ -60,7 +60,7 @@ class BadgeTests(unittest.TestCase):
             self.assertEqual(badges.short_reset(sub, "en", self.NOW), expected, sub)
 
     def test_codex_reset_moment_is_kept_for_the_badge(self):
-        bar = {"pct": 10, "sub": "(토) 오후 5:10에 초기화", "reset_at": "2026-10-24T17:10"}
+        bar = {"pct": 10, "sub": "(토) 오후 5:10", "reset_at": "2026-10-24T17:10"}
         self.assertEqual(badges.columns({"bars": [bar]}, "ko", self.NOW)[0]["reset"], "(토) 오후 5:10")
         later = datetime(2026, 10, 24, 18, 0)
         self.assertEqual(badges.columns({"bars": [bar]}, "ko", later)[0]["reset"], "곧 초기화")
@@ -329,7 +329,7 @@ class CodexWebTests(unittest.TestCase):
         assert bar["label"] == "주간 한도", bar
         assert bar["pct"] == 65.0, bar          # 35% 남음 -> 65% 사용
         assert bar["pct_text"] == "65%", bar
-        assert bar["sub"] == "(토) 오후 5:10에 초기화", bar
+        assert bar["sub"] == "(토) 오후 5:10", bar
 
         # English "used" wording is taken as used, not converted.
         used_block = web.parse_block(["Weekly limit", "42% used", "resets Sep 19"])
@@ -352,7 +352,7 @@ class CodexWebTests(unittest.TestCase):
         web.LANG = web.usage.LANG = "en"
         english = web.make_payload({"blocks": WEB_FIXTURE_BLOCKS})["bars"][0]
         assert english["label"] == "Weekly limit", english
-        assert english["sub"] == "Resets Sat 5:10 PM", english  # like Claude's weekly reset
+        assert english["sub"] == "Sat 5:10 PM", english  # like Claude's weekly reset
         assert english["reset_at"] == "2026-09-19T17:10", english
         assert web.normalize_label("5시간 사용 한도") == "5-hour limit"
         web.LANG = web.usage.LANG = "ko"
