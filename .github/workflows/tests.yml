@@ -28,7 +28,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $app = Join-Path $env:RUNNER_TEMP "ccu app 문서"
           New-Item -ItemType Directory -Path $app | Out-Null
-          Copy-Item -Recurse -Force -Path (Join-Path $PWD "*") -Destination $app
+          # Like a ZIP install: no .git (it would also carry the checkout's token).
+          Get-ChildItem -Force | Where-Object Name -ne ".git" | Copy-Item -Recurse -Force -Destination $app
           $desktop = [Environment]::GetFolderPath("Desktop")
           $links = @(
             (Join-Path $desktop "Claude Codex Usage.lnk"),

@@ -52,6 +52,11 @@ executing freshly pulled code would be the highest-impact path, so it was remove
   it yourself (`git pull` then `install.cmd`). The install is always a deliberate,
   user-initiated step.
 
+- A ZIP install has no git checkout. It instead reads the latest release's
+  version from the GitHub API (`api.github.com/repos/minsk8775/claude-codex-usage`,
+  one small JSON request) and compares it with its own. Nothing is downloaded;
+  the badge opens the release page.
+
 **Turn the check off** by setting the environment variable
 `CLAUDE_CODEX_NO_UPDATE=1` or creating an empty file named `.noupdate` next to
 `claude_usage.pyw`. The widget then never contacts the remote for updates.

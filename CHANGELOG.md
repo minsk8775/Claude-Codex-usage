@@ -13,6 +13,9 @@ English only).
 ### Changed
 - **위젯도 오래된 숫자를 회색으로 표시합니다**: 배지처럼, 3분 넘게 갱신되지 않은 숫자(켤 때
   보이는 이전 캐시, 계속 실패하는 동기화)는 회색입니다.
+- **ZIP으로 설치해도 업데이트 알림이 뜹니다**: git이 없는 설치는 시작할 때 GitHub 최신 릴리스
+  버전과 비교해(읽기만 함) 새 버전이면 `● 업데이트 필요` 배지를 띄우고, 누르면 릴리스
+  페이지가 열립니다.
 - `설치된 앱`의 조용한 제거(`--uninstall --quiet`)를 지원합니다. 확인·완료 창 없이 지웁니다.
 - GitHub의 Windows 테스트가 실제로 설치한 뒤 조용히 제거하고, 바로가기·설치된 앱 항목·
   설정·로그인 정보·프로그램 폴더·실행 중인 프로세스가 하나도 남지 않는지 확인합니다.
@@ -23,6 +26,9 @@ English only).
 - **The widget greys out old numbers too**: as on the badges, numbers not
   refreshed for over 3 minutes (the cache shown at start, syncs that keep
   failing) are drawn grey.
+- **ZIP installs get update notices too**: without git, the widget compares
+  its version with the latest GitHub release at startup (read-only) and shows
+  the `● Update available` badge, which opens the release page.
 - Quiet uninstall from `Installed apps` (`--uninstall --quiet`), with no
   confirmation or completion dialog.
 - The Windows tests on GitHub now really install the app, remove it with the

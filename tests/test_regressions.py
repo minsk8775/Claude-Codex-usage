@@ -610,6 +610,28 @@ class WidgetTests(unittest.TestCase):
         app._listen()
         self.assertEqual(list(app.events.queue), [("show", None)])
 
+    def test_zip_install_compares_with_the_latest_release(self):
+        def answer(tag):
+            response = Mock()
+            response.read.return_value = json.dumps({"tag_name": tag}).encode()
+            response.__enter__ = Mock(return_value=response)
+            response.__exit__ = Mock(return_value=False)
+            return response
+        with tempfile.TemporaryDirectory() as temp, patch.object(widget, "BASE_DIR", Path(temp)), \
+                patch.object(widget, "NO_UPDATE_FILE", Path(temp) / ".noupdate"), \
+                patch.dict(os.environ, {}, clear=True), patch.object(widget, "APP_VERSION", "0.9.2"):
+            for tag, newer in (("v0.9.3", True), ("v0.9.2", False), ("v0.10.0", True), ("nightly", False)):
+                with patch.object(widget.urllib.request, "urlopen", return_value=answer(tag)) as opened:
+                    self.assertEqual(widget.updates_available(), newer, tag)
+                self.assertEqual(opened.call_args.args[0].full_url, widget.LATEST_RELEASE_API)
+            with patch.object(widget.urllib.request, "urlopen", side_effect=OSError("offline")), \
+                    patch.object(widget, "log_error"):
+                self.assertFalse(widget.updates_available())
+            (Path(temp) / ".noupdate").write_text("")
+            with patch.object(widget.urllib.request, "urlopen") as opened:
+                self.assertFalse(widget.updates_available())
+            opened.assert_not_called()
+
     def test_git_failure_is_nonfatal_and_never_runs_checkout(self):
         with patch.object(widget, "run_git", side_effect=FileNotFoundError("git")), patch.object(widget, "log_error"):
             self.assertFalse(widget.updates_available())

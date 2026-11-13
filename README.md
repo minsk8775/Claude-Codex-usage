@@ -156,7 +156,9 @@ git pull
 install.cmd
 ```
 
-ZIP으로 설치했다면 `uninstall.cmd`로 지운 뒤 새 ZIP을 받아 `install.cmd`를 실행합니다.
+ZIP으로 설치한 경우에는 시작할 때 GitHub의 최신 릴리스 버전과 비교해(읽기만 하고 아무것도
+내려받지 않음) 새 버전이면 같은 배지를 띄우고, 누르면 릴리스 페이지가 열립니다. 새 ZIP을
+같은 폴더에 덮어 풀고 `install.cmd`를 실행하면 됩니다(로그인과 설정은 그대로 유지).
 확인 자체를 끄려면 환경 변수 `CLAUDE_CODEX_NO_UPDATE=1`을 설정하거나
 `claude_usage.pyw` 옆에 빈 `.noupdate` 파일을 둡니다.
 
@@ -380,7 +382,10 @@ git pull
 install.cmd
 ```
 
-For a ZIP install, run `uninstall.cmd`, download the new ZIP and run `install.cmd`.
+A ZIP install instead compares its version with the latest GitHub release at
+startup (read-only; nothing is downloaded) and shows the same badge, which opens
+the release page. Extract the new ZIP over the same folder and run `install.cmd`;
+sign-ins and settings are kept.
 To turn the check off, set `CLAUDE_CODEX_NO_UPDATE=1` or put an empty `.noupdate`
 file next to `claude_usage.pyw`.
 

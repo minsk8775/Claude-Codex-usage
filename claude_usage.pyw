@@ -9,6 +9,7 @@ import ctypes
 import json
 import os
 import queue
+import re
 import shutil
 import socket
 import subprocess
@@ -16,6 +17,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import urllib.request
 from ctypes import wintypes
 from pathlib import Path
 from tkinter import font as tkfont
@@ -336,11 +338,38 @@ def run_git(*arguments, timeout=90):
 # (Case-insensitive; the .git suffix is optional.)
 ALLOWED_ORIGINS = ("https://github.com/minsk8775/claude-codex-usage",)
 NO_UPDATE_FILE = BASE_DIR / ".noupdate"
+# A ZIP install has no git checkout; it compares its version with the latest
+# GitHub release instead (read-only JSON, nothing is downloaded or run).
+LATEST_RELEASE_API = "https://api.github.com/repos/minsk8775/claude-codex-usage/releases/latest"
+
+
+def update_checks_disabled():
+    return bool(os.environ.get("CLAUDE_CODEX_NO_UPDATE")) or NO_UPDATE_FILE.exists()
+
+
+def version_tuple(text):
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", str(text or "").strip())
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def newer_release_published():
+    """True when GitHub's latest release is newer than this copy (ZIP installs)."""
+    request = urllib.request.Request(LATEST_RELEASE_API, headers={
+        "Accept": "application/vnd.github+json", "User-Agent": "claude-codex-usage"})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            data = json.loads(response.read(200_000).decode("utf-8"))
+    except (OSError, ValueError) as error:
+        log_error("release check skipped: %r" % error)
+        return False
+    latest = version_tuple(data.get("tag_name") if isinstance(data, dict) else None)
+    current = version_tuple(APP_VERSION)
+    return bool(latest and current and latest > current)
 
 
 def update_checks_allowed():
     """False when update checks are disabled or origin is not the trusted repo."""
-    if os.environ.get("CLAUDE_CODEX_NO_UPDATE") or NO_UPDATE_FILE.exists():
+    if update_checks_disabled():
         return False
     origin = run_git("remote", "get-url", "origin")
     if origin.returncode:
@@ -359,7 +388,7 @@ def updates_available():
     reviewing it on GitHub.
     """
     if not (BASE_DIR / ".git").exists():
-        return False
+        return not update_checks_disabled() and newer_release_published()
     try:
         if not update_checks_allowed():
             return False
@@ -1845,8 +1874,10 @@ class UsageApp:
     def _open_update_page(self):
         """Open the project on GitHub so the user can review and install the
         update. We never install it for them from here."""
+        # A ZIP install updates from the release page (new ZIP + install.cmd).
+        page = REPO_URL if (BASE_DIR / ".git").exists() else REPO_URL + "/releases/latest"
         try:
-            os.startfile(REPO_URL)
+            os.startfile(page)
         except OSError as error:
             log_error("opening update page failed: %r" % error)
 
