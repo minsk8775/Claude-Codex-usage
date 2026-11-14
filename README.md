@@ -1,6 +1,9 @@
-# Claude Codex Usage for Windows
+<p align="center"><img src="assets/icon.png" alt="Claude Codex Usage icon" width="128"></p>
 
-[한국어](#한국어) · [English](#english)
+<h1 align="center">Claude Codex Usage for Windows</h1>
+
+<p align="center"><a href="#한국어">한국어</a> · <a href="#english">English</a> ·
+<a href="https://github.com/minsk8775/claude-codex-usage/releases/latest">최신 릴리스 / Latest release</a></p>
 
 Claude와 Codex 구독 사용량을 **작업표시줄 위의 작은 위젯**이나 **Claude·Codex 앱 창의
 제목 표시줄 배지**로 보여 주는 Windows 도구입니다. 모델을 호출하지 않으므로 사용량을

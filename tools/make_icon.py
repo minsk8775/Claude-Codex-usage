@@ -184,6 +184,8 @@ def main():
               for size in SIZES]
     images[-1].save(args.out, format="ICO", sizes=[(size, size) for size in SIZES],
                     append_images=images[:-1])
+    if args.out == str(OUT):
+        images[-1].save(ASSETS / "icon.png")  # for the README
     print("wrote", args.out)
 
 
