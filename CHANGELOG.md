@@ -8,15 +8,11 @@ English only).
 이 프로젝트의 모든 주요 변경 사항을 적습니다. 버전마다 한국어 다음에 영어로 적습니다
 (0.7.0은 영어로만 적혀 있습니다).
 
-## [Unreleased]
+## [0.9.3] - 2026-11-14
 
 ### Changed
 - **위젯도 오래된 숫자를 회색으로 표시합니다**: 배지처럼, 3분 넘게 갱신되지 않은 숫자(켤 때
   보이는 이전 캐시, 계속 실패하는 동기화)는 회색입니다.
-- **우클릭 한 번에 `완전 종료`가 눌려 꺼지던 문제**: 메뉴를 버튼을 누르는 순간 열어서, 메뉴가
-  커서 아래에 뜨면 버튼을 떼는 동작이 그 자리의 항목을 눌렀습니다. 화면 아래쪽에서는 메뉴가
-  위로 펼쳐져 맨 아래 항목인 `완전 종료`가 커서 밑에 왔습니다. 이제 위젯·배지의 우클릭과
-  `▾` 버튼 메뉴는 버튼을 뗄 때 열리고, `완전 종료`는 확인 창을 거칩니다.
 - **Codex 초기화 시간을 Claude처럼 요일과 시각으로 보여 줍니다**: 사용량 페이지의 날짜
   (`2026. 10. 24. 오후 5:10`)를 남은 시간(`2일 2시간 후`) 대신 Claude의 주간 초기화처럼
   `(토) 오후 5:10`으로 보여 줍니다(위젯·배지 모두, `에 초기화` 없이). 일주일 이상 남았으면
@@ -27,6 +23,13 @@ English only).
 - `설치된 앱`의 조용한 제거(`--uninstall --quiet`)를 지원합니다. 확인·완료 창 없이 지웁니다.
 - GitHub의 Windows 테스트가 실제로 설치한 뒤 조용히 제거하고, 바로가기·설치된 앱 항목·
   설정·로그인 정보·프로그램 폴더·실행 중인 프로세스가 하나도 남지 않는지 확인합니다.
+- `CHANGELOG.md`의 모든 버전에 영어 설명을 함께 적었습니다.
+
+### Fixed
+- **우클릭 한 번에 `완전 종료`가 눌려 꺼지던 문제**: 메뉴를 버튼을 누르는 순간 열어서, 메뉴가
+  커서 아래에 뜨면 버튼을 떼는 동작이 그 자리의 항목을 눌렀습니다. 화면 아래쪽에서는 메뉴가
+  위로 펼쳐져 맨 아래 항목인 `완전 종료`가 커서 밑에 왔습니다. 이제 위젯·배지의 우클릭과
+  `▾` 버튼 메뉴는 버튼을 뗄 때 열리고, `완전 종료`는 확인 창을 거칩니다.
 
 ### English
 
@@ -34,11 +37,6 @@ English only).
 - **The widget greys out old numbers too**: as on the badges, numbers not
   refreshed for over 3 minutes (the cache shown at start, syncs that keep
   failing) are drawn grey.
-- **A single right-click could hit `Quit`**: menus opened when the button was
-  pressed, so a menu that appeared under the cursor took the button release as a
-  click on the item there; near the bottom of the screen the menu opens upward
-  and that item was `Quit`, the last one. Right-click menus on the widget and
-  badges and the `▾` button menu now open on release, and `Quit` asks first.
 - **Codex reset times look like Claude's: weekday and time**: the page's date
   (`2026. 10. 24. 오후 5:10`) is shown as `Sat 5:10 PM` (`(토) 오후 5:10` in
   Korean), like Claude's weekly reset, instead of time left (`in 2d 2h`). A reset
@@ -51,6 +49,14 @@ English only).
 - The Windows tests on GitHub now really install the app, remove it with the
   quiet uninstaller and check that no shortcut, Installed apps entry, settings,
   sign-in data, program folder or running process is left.
+- Every version in `CHANGELOG.md` now has an English description too.
+
+#### Fixed
+- **A single right-click could hit `Quit`**: menus opened when the button was
+  pressed, so a menu that appeared under the cursor took the button release as a
+  click on the item there; near the bottom of the screen the menu opens upward
+  and that item was `Quit`, the last one. Right-click menus on the widget and
+  badges and the `▾` button menu now open on release, and `Quit` asks first.
 
 ## [0.9.2] - 2026-11-09
 
@@ -923,6 +929,7 @@ First version: `claude-usage` and `codex-usage` combined into one widget.
 - A translucent window (about 85% opacity) that keeps its bottom edge in place
   when its height changes after being moved.
 
+[0.9.3]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.3
 [0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.2
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.1
 [0.9.0]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.0
