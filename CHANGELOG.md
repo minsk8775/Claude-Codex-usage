@@ -24,9 +24,10 @@ English only).
 - GitHub의 Windows 테스트가 실제로 설치한 뒤 조용히 제거하고, 바로가기·설치된 앱 항목·
   설정·로그인 정보·프로그램 폴더·실행 중인 프로세스가 하나도 남지 않는지 확인합니다.
 - `CHANGELOG.md`의 모든 버전에 영어 설명을 함께 적었습니다.
-- **새 아이콘**: 위에 Claude 느낌의 주황 불꽃, 아래에 Codex를 뜻하는 터미널 `>_`, 가운데에
-  `Usage`. 작은 크기(32px 이하)에서는 글자 없이 두 표시만 위아래로 둡니다. 두 회사 로고를
-  그대로 쓰지 않고 직접 그렸습니다(`tools/make_icon.py`).
+- **새 아이콘**: Claude 로고(왼쪽 위)와 OpenAI 로고(오른쪽 아래)를 겹치고 아래에 `Usage`
+  (Inter Display SemiBold)를 넣었습니다. 바탕은 뒤가 비쳐 보이는 리퀴드 글라스 프레임이고,
+  로고는 색을 살린 채 은은한 광택만 줍니다. 32px 이하에서는 글자 없이 두 로고만 둡니다.
+  `tools/make_icon.py`로 다시 만들 수 있습니다(`--style flat`은 로고 광택 없이).
 
 ### Fixed
 - **우클릭 한 번에 `완전 종료`가 눌려 꺼지던 문제**: 메뉴를 버튼을 누르는 순간 열어서, 메뉴가
@@ -53,9 +54,11 @@ English only).
   quiet uninstaller and check that no shortcut, Installed apps entry, settings,
   sign-in data, program folder or running process is left.
 - Every version in `CHANGELOG.md` now has an English description too.
-- **New icon**: a Claude-style orange spark on top, a terminal `>_` for Codex
-  below and `Usage` between them; at 32 px and smaller only the two marks. The
-  marks are drawn for this app (`tools/make_icon.py`), not copied logos.
+- **New icon**: the Claude logo (top left) overlapping the OpenAI logo (bottom
+  right) with `Usage` (Inter Display SemiBold) below, on a see-through "liquid
+  glass" frame; the logos keep their colours with a light sheen. At 32 px and
+  smaller only the two logos. `tools/make_icon.py` rebuilds it (`--style flat`
+  drops the sheen on the logos).
 
 #### Fixed
 - **A single right-click could hit `Quit`**: menus opened when the button was
