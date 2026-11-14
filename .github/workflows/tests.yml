@@ -44,6 +44,16 @@ jobs:
           $quiet = (Get-ItemProperty $entry).QuietUninstallString
           if (-not $quiet) { throw "missing Installed apps entry" }
           Start-Sleep -Seconds 10  # let the widget and watcher start
+          # Both must still be running: a startup error would end them silently
+          # (pythonw has no console), leaving no notification-area icon.
+          $ours = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($app) })
+          $widgets = @($ours | Where-Object { $_.CommandLine -match 'claude_usage\.pyw"?\s*$' })
+          $watchers = @($ours | Where-Object { $_.CommandLine -match '--watch' })
+          if (-not $widgets) {
+            Get-Content (Join-Path $env:LOCALAPPDATA "ClaudeCodexUsage\error.log") -ErrorAction SilentlyContinue
+            throw "the widget is not running after install"
+          }
+          if (-not $watchers) { throw "the watcher is not running after install" }
 
           python (Join-Path $app "claude_usage.pyw") --uninstall --quiet
           # The program folder is deleted by a helper after the uninstaller
