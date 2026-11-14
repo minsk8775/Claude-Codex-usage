@@ -131,6 +131,7 @@ Chrome의 로그인은 쓰지 않으므로 **각각 한 번씩** 로그인해야
 | 항상 위 | 우클릭 → `항상 위` |
 | 동기화 문제 해결 | 우클릭 → `동기화 문제 해결` → `다시 시도` / `리더 브라우저 재시작` / `다시 로그인 (브라우저 창)` |
 | 언어 | 우클릭 → `언어 (Language)` → `한국어` / `영어 (English)` |
+| API 사용량·비용 | 우클릭 → `API 사용량 대시보드 열기` → `Claude API` / `OpenAI API` (종량제 API 비용은 각 대시보드에서 확인) |
 | 종료 | 우클릭 → `종료 (앱을 켜면 다시 표시)`. 위젯만 닫히고, 다음에 Claude·ChatGPT 앱을 켜면 다시 뜹니다 |
 | 완전 종료 | 우클릭 → `완전 종료 (자동 실행 끔)`. 감시자까지 끄고, 재부팅해도 앱을 켜도 뜨지 않습니다. 바탕화면 바로가기로 위젯을 다시 열면 자동 실행도 다시 켜집니다 |
 | 제거 | `설정 → 앱 → 설치된 앱` → `Claude Codex Usage` → `제거` |
@@ -357,6 +358,7 @@ opening a watched app brings it back.
 | Always on top | Right-click → `Always on top` |
 | Fix sync issues | Right-click → `Fix sync issues` → `Retry now` / `Restart reader browser` / `Re-sign in (browser)` |
 | Language | Right-click → `Language` → `한국어 (Korean)` / `English` |
+| API usage and cost | Right-click → `Open API usage dashboard` → `Claude API` / `OpenAI API` (pay-as-you-go API spend is shown there) |
 | Close | Right-click → `Close (back when an app opens)`. Closes the widget; it comes back the next time Claude or ChatGPT opens |
 | Quit | Right-click → `Quit (no auto-start)`. Also stops the watcher, so nothing starts again (even after a restart) until you open the widget from its desktop shortcut |
 | Uninstall | `Settings → Apps → Installed apps` → `Claude Codex Usage` → `Uninstall` |

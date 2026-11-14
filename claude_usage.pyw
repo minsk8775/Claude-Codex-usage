@@ -131,6 +131,14 @@ FIX_RECONNECT_ID = 1007
 FIX_RESTART_ID = 1008
 RESET_POS_ID = 1009
 RESET_BADGES_ID = 1010
+API_CLAUDE_ID = 1012
+API_OPENAI_ID = 1013
+# API usage and cost (pay-as-you-go, not the subscription limits shown here)
+# live on each platform's own dashboard; the menu just opens it.
+API_DASHBOARDS = {
+    "claude": "https://platform.claude.com/settings/usage",
+    "openai": "https://platform.openai.com/usage",
+}
 # How usage is displayed: the floating widget, badges on the app title bars, or both.
 DISPLAY_MODES = ("widget", "badges", "both")
 DEFAULT_DISPLAY = "both"
@@ -167,6 +175,9 @@ STRINGS = {
     "fix_restart": {"ko": "리더 브라우저 재시작", "en": "Restart reader browser"},
     "reset_position": {"ko": "위치 초기화 (시계 위로)", "en": "Reset position"},
     "reset_badges": {"ko": "배지 위치 초기화", "en": "Reset badge positions"},
+    "api_dashboards": {"ko": "API 사용량 대시보드 열기", "en": "Open API usage dashboard"},
+    "api_claude": {"ko": "Claude API (platform.claude.com)", "en": "Claude API (platform.claude.com)"},
+    "api_openai": {"ko": "OpenAI API (platform.openai.com)", "en": "OpenAI API (platform.openai.com)"},
     "uninstall_confirm_title": {"ko": "Claude Codex Usage 제거", "en": "Uninstall Claude Codex Usage"},
     "uninstall_confirm": {
         "ko": "위젯·감시자를 종료하고 바로가기·설정·로그인(전용 브라우저)과\n"
@@ -215,6 +226,8 @@ MENU_ACTIONS = {
     LANG_EN_ID: ("lang", "en"),
     RESET_POS_ID: ("reset_position", None),
     RESET_BADGES_ID: ("reset_badges", None),
+    API_CLAUDE_ID: ("open_dashboard", "claude"),
+    API_OPENAI_ID: ("open_dashboard", "openai"),
     QUIT_ID: ("quit", None),
     FIX_RETRY_ID: ("recover", "retry"),
     FIX_RESTART_ID: ("recover", "restart"),
@@ -249,6 +262,9 @@ def menu_spec(lang, mode, on_top, display):
          [item("cmd", FIX_RETRY_ID, "fix_retry"),
           item("cmd", FIX_RESTART_ID, "fix_restart"),
           item("cmd", FIX_RECONNECT_ID, "fix_reconnect")]),
+        ("sub", tr(lang, "api_dashboards"),
+         [item("cmd", API_CLAUDE_ID, "api_claude"),
+          item("cmd", API_OPENAI_ID, "api_openai")]),
         None,
         item("cmd", RESET_POS_ID, "reset_position", enabled=widget),
         *([item("cmd", RESET_BADGES_ID, "reset_badges")] if display != "widget" else []),
@@ -1205,6 +1221,11 @@ class UsageApp:
                 self._set_display(payload)
             elif action == "reset_position":
                 self._reset_position()
+            elif action == "open_dashboard":
+                try:
+                    os.startfile(API_DASHBOARDS[payload])
+                except (OSError, KeyError) as error:
+                    log_error("opening API dashboard failed: %r" % error)
             elif action == "reset_badges":
                 send_control(BADGE_PORT, "reset")
             elif action == "menu":

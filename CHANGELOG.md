@@ -8,6 +8,21 @@ English only).
 이 프로젝트의 모든 주요 변경 사항을 적습니다. 버전마다 한국어 다음에 영어로 적습니다
 (0.7.0은 영어로만 적혀 있습니다).
 
+## [Unreleased]
+
+### Added
+- **우클릭 메뉴에 `API 사용량 대시보드 열기`**: Claude API(platform.claude.com)와 OpenAI
+  API(platform.openai.com)의 사용량·비용 페이지를 브라우저로 바로 엽니다. 이 앱이 보여 주는
+  구독 한도와 별개인 종량제 API 비용은 각 대시보드에서 확인합니다(키를 저장하지 않음).
+
+### English
+
+#### Added
+- **`Open API usage dashboard` in the right-click menu** opens the Claude API
+  (platform.claude.com) and OpenAI API (platform.openai.com) usage and cost
+  pages in the browser. Pay-as-you-go API spend, separate from the subscription
+  limits this app shows, is read there; no key is stored.
+
 ## [0.9.3] - 2026-11-14
 
 ### Changed

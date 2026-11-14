@@ -823,6 +823,16 @@ class WidgetTests(unittest.TestCase):
         fills = {call.kwargs.get("fill") for call in app.canvas.create_text.call_args_list}
         self.assertNotIn(widget.STALE, fills)
 
+    def test_menu_opens_the_api_usage_dashboards(self):
+        app = self.app()
+        with patch.object(widget.os, "startfile", create=True) as start:
+            app.events.put(widget.MENU_ACTIONS[widget.API_CLAUDE_ID])
+            app.events.put(widget.MENU_ACTIONS[widget.API_OPENAI_ID])
+            app._poll_events()
+        self.assertEqual([c.args[0] for c in start.call_args_list],
+                         [widget.API_DASHBOARDS["claude"], widget.API_DASHBOARDS["openai"]])
+        self.assertTrue(all(url.startswith("https://") for url in widget.API_DASHBOARDS.values()))
+
     def test_quit_turns_auto_start_off_and_close_does_not(self):
         app = self.app()
         app.exit = Mock()
