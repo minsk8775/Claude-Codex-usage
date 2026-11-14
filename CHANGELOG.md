@@ -8,24 +8,12 @@ English only).
 이 프로젝트의 모든 주요 변경 사항을 적습니다. 버전마다 한국어 다음에 영어로 적습니다
 (0.7.0은 영어로만 적혀 있습니다).
 
-## [0.9.4] - 2026-11-14
-
-### Added
-- **우클릭 메뉴에 `API 사용량 대시보드 열기`**: Claude API(platform.claude.com)와 OpenAI
-  API(platform.openai.com)의 사용량·비용 페이지를 브라우저로 바로 엽니다. 이 앱이 보여 주는
-  구독 한도와 별개인 종량제 API 비용은 각 대시보드에서 확인합니다(키를 저장하지 않음).
-
-### English
-
-#### Added
-- **`Open API usage dashboard` in the right-click menu** opens the Claude API
-  (platform.claude.com) and OpenAI API (platform.openai.com) usage and cost
-  pages in the browser. Pay-as-you-go API spend, separate from the subscription
-  limits this app shows, is read there; no key is stored.
-
 ## [0.9.3] - 2026-11-14
 
 ### Changed
+- **우클릭 메뉴에 `API 사용량 대시보드 열기`**: Claude API(platform.claude.com)와 OpenAI
+  API(platform.openai.com)의 사용량·비용 페이지를 브라우저로 바로 엽니다. 이 앱이 보여 주는
+  구독 한도와 별개인 종량제 API 비용은 각 대시보드에서 확인합니다(키를 저장하지 않음).
 - **위젯도 오래된 숫자를 회색으로 표시합니다**: 배지처럼, 3분 넘게 갱신되지 않은 숫자(켤 때
   보이는 이전 캐시, 계속 실패하는 동기화)는 회색입니다.
 - **Codex 초기화 시간을 Claude처럼 요일과 시각으로 보여 줍니다**: 사용량 페이지의 날짜
@@ -53,6 +41,10 @@ English only).
 ### English
 
 #### Changed
+- **`Open API usage dashboard` in the right-click menu** opens the Claude API
+  (platform.claude.com) and OpenAI API (platform.openai.com) usage and cost
+  pages in the browser. Pay-as-you-go API spend, separate from the subscription
+  limits this app shows, is read there; no key is stored.
 - **The widget greys out old numbers too**: as on the badges, numbers not
   refreshed for over 3 minutes (the cache shown at start, syncs that keep
   failing) are drawn grey.
@@ -953,7 +945,6 @@ First version: `claude-usage` and `codex-usage` combined into one widget.
 - A translucent window (about 85% opacity) that keeps its bottom edge in place
   when its height changes after being moved.
 
-[0.9.4]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.4
 [0.9.3]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.3
 [0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.2
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.1

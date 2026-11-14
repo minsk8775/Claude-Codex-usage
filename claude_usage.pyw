@@ -28,7 +28,7 @@ from title_badges import STALE, is_stale, level_color, rounded as rounded_rectan
 from usage import atomic_json
 
 
-APP_VERSION = "0.9.4"
+APP_VERSION = "0.9.3"
 BASE_DIR = Path(__file__).resolve().parent
 USAGE_SCRIPT = BASE_DIR / "usage.py"
 CODEX_WEB_SCRIPT = BASE_DIR / "codex_web.py"
