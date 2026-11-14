@@ -857,6 +857,7 @@ class WidgetTests(unittest.TestCase):
         app.hit_mode, app.hit_close, app.hit_sync = (100, 0, 120, 20), (0, 0, 0, 0), (0, 0, 0, 0)
         app.hit_grip = app.hit_prev = app.hit_next = app.hit_update = (0, 0, 0, 0)
         app.root = Mock()
+        app.root.winfo_rootx.return_value = app.root.winfo_rooty.return_value = 500
         app.dragging = app.resizing = False
         app._on_click(Mock(x=110, y=10))
         app._show_context_menu.assert_not_called()   # not on the press
