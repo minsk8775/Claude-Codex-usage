@@ -8,7 +8,7 @@ English only).
 이 프로젝트의 모든 주요 변경 사항을 적습니다. 버전마다 한국어 다음에 영어로 적습니다
 (0.7.0은 영어로만 적혀 있습니다).
 
-## [Unreleased]
+## [0.9.4] - 2026-11-14
 
 ### Added
 - **우클릭 메뉴에 `API 사용량 대시보드 열기`**: Claude API(platform.claude.com)와 OpenAI
@@ -953,6 +953,7 @@ First version: `claude-usage` and `codex-usage` combined into one widget.
 - A translucent window (about 85% opacity) that keeps its bottom edge in place
   when its height changes after being moved.
 
+[0.9.4]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.4
 [0.9.3]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.3
 [0.9.2]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.2
 [0.9.1]: https://github.com/minsk8775/Claude-Codex-usage/releases/tag/v0.9.1
