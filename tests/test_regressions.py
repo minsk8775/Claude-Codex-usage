@@ -829,14 +829,39 @@ class WidgetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             auto = Path(temp) / "auto.enabled"
             auto.write_text("enabled")
-            with patch.object(widget, "AUTO_FILE", auto), patch.object(widget, "send_control") as send:
+            with patch.object(widget, "AUTO_FILE", auto), patch.object(widget, "send_control") as send, \
+                    patch.object(widget, "messagebox") as box:
                 app.events.put(widget.MENU_ACTIONS[widget.EXIT_ID])
                 app._poll_events()
                 self.assertTrue(auto.exists())
+                box.askyesno.return_value = False  # a stray click on Quit changes nothing
+                app.events.put(widget.MENU_ACTIONS[widget.QUIT_ID])
+                app._poll_events()
+                self.assertTrue(auto.exists())
+                send.assert_not_called()
+                box.askyesno.return_value = True
                 app.events.put(widget.MENU_ACTIONS[widget.QUIT_ID])
                 app._poll_events()
             self.assertFalse(auto.exists())
         send.assert_called_once_with(widget.WATCH_PORT, "exit")
+
+    def test_menus_open_on_button_release(self):
+        # Opened on the press, the menu appeared under the cursor and the
+        # release picked the item there (Quit, near the screen bottom).
+        for name in ("claude_usage.pyw", "title_badges.py"):
+            source = (REPO / name).read_text(encoding="utf-8")
+            self.assertNotIn('bind("<Button-3>"', source, name)
+            self.assertIn('bind("<ButtonRelease-3>"', source, name)
+        app = self.app()
+        app._show_context_menu = Mock()
+        app.hit_mode, app.hit_close, app.hit_sync = (100, 0, 120, 20), (0, 0, 0, 0), (0, 0, 0, 0)
+        app.hit_grip = app.hit_prev = app.hit_next = app.hit_update = (0, 0, 0, 0)
+        app.root = Mock()
+        app.dragging = app.resizing = False
+        app._on_click(Mock(x=110, y=10))
+        app._show_context_menu.assert_not_called()   # not on the press
+        app._on_release(Mock())
+        app._show_context_menu.assert_called_once()  # on the release
 
     def test_watcher_stays_off_after_a_full_quit(self):
         control = Mock()

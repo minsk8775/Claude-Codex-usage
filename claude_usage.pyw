@@ -184,6 +184,13 @@ STRINGS = {
     "show_hide": {"ko": "표시 / 숨기기", "en": "Show / Hide"},
     "exit": {"ko": "종료 (앱을 켜면 다시 표시)", "en": "Close (back when an app opens)"},
     "quit": {"ko": "완전 종료 (자동 실행 끔)", "en": "Quit (no auto-start)"},
+    "quit_confirm_title": {"ko": "완전 종료", "en": "Quit"},
+    "quit_confirm": {
+        "ko": "위젯과 자동 실행을 모두 끕니다. 앱을 켜도, 재부팅해도 다시 뜨지 않으며\n"
+              "바탕화면 바로가기로 열면 다시 켜집니다.\n\n완전 종료할까요?",
+        "en": "This stops the widget and auto-start. It will not come back when an app "
+              "opens or after a restart, until you open it from the desktop shortcut.\n\nQuit?",
+    },
     "language": {"ko": "언어 (Language)", "en": "Language"},
     "lang_ko": {"ko": "한국어", "en": "한국어 (Korean)"},
     "lang_en": {"ko": "영어 (English)", "en": "English"},
@@ -1057,7 +1064,11 @@ class UsageApp:
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
         self.canvas.bind("<Double-Button-1>", self._on_double_click)
-        self.canvas.bind("<Button-3>", self._on_right_click)
+        # Open menus when the button is released, not pressed: opened on the
+        # press, the menu appears under the cursor and the release itself
+        # picked the item there (near the screen bottom that was the last
+        # one, Quit).
+        self.canvas.bind("<ButtonRelease-3>", self._on_right_click)
         self.canvas.bind("<Control-MouseWheel>", self._on_wheel)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
         self._draw()
@@ -1199,8 +1210,8 @@ class UsageApp:
             elif action == "menu":
                 self.tray.popup()
             elif action == "quit":
-                self.quit_completely()
-                return
+                if self.quit_completely():
+                    return
             elif action == "recover":
                 self._recover(payload)
             elif action == "recover_done":
@@ -1842,10 +1853,7 @@ class UsageApp:
             self.start_sync(True)
             return
         if self._contains(self.hit_mode, event.x, event.y):
-            self._show_context_menu(
-                self.root.winfo_rootx() + (self.hit_mode[0] + self.hit_mode[2]) / 2,
-                self.root.winfo_rooty() + self.hit_mode[3],
-            )
+            self.menu_on_release = True  # opened in _on_release (see the bindings)
             return
         if self._contains(self.hit_close, event.x, event.y):
             self.hide()
@@ -1947,6 +1955,13 @@ class UsageApp:
         self.root.geometry("+%d+%d" % (x, y))
 
     def _on_release(self, _event):
+        if getattr(self, "menu_on_release", False):
+            self.menu_on_release = False
+            self._show_context_menu(
+                self.root.winfo_rootx() + (self.hit_mode[0] + self.hit_mode[2]) / 2,
+                self.root.winfo_rooty() + self.hit_mode[3],
+            )
+            return
         if self.resizing:
             self.resizing = False
             self._save_settings()
@@ -2047,6 +2062,12 @@ class UsageApp:
         """Stop everything and stay stopped: no auto-start, no watcher, until the
         user opens the desktop shortcut again (which turns both back on)."""
         try:
+            confirmed = messagebox.askyesno(self._t("quit_confirm_title"), self._t("quit_confirm"))
+        except Exception:
+            confirmed = False
+        if not confirmed:
+            return False
+        try:
             AUTO_FILE.unlink()
         except FileNotFoundError:
             pass
@@ -2054,6 +2075,7 @@ class UsageApp:
             log_error(repr(error))
         send_control(WATCH_PORT, "exit")
         self.exit()
+        return True
 
     def exit(self):
         if self.exiting:

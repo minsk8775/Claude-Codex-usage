@@ -467,7 +467,7 @@ class Badge:
         self.canvas.bind("<B1-Motion>", self.on_motion)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.canvas.bind("<Double-Button-1>", lambda _e: self.app.open_widget())
-        self.canvas.bind("<Button-3>", self.on_menu)
+        self.canvas.bind("<ButtonRelease-3>", self.on_menu)  # on release: see the widget
 
     def badge_hwnd(self):
         return self.app.win.user32.GetAncestor(self.win.winfo_id(), 2) or self.win.winfo_id()
