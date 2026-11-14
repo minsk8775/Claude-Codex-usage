@@ -225,6 +225,7 @@ localhost origin 제한은 클라이언트 인증이 아니므로, 같은 사용
 | `codex_web.py` | ChatGPT 공식 사용량 페이지 읽기 (브라우저) |
 | `title_badges.py` | 앱 제목 표시줄 배지 (보조 프로세스) |
 | `install.py` / `install.cmd` | 설치, 바로가기 만들기 |
+| `tools/make_icon.py` | 앱 아이콘(`assets/claude-usage.ico`) 다시 그리기 (Pillow 필요, 개발용) |
 | `uninstall.cmd` | 완전 제거 |
 | `tests/` | 오프라인 회귀 테스트 |
 
@@ -454,6 +455,7 @@ programs running as the same user can still reach DevTools. See
 | `codex_web.py` | Codex usage from the official ChatGPT page (browser) |
 | `title_badges.py` | Title-bar badges (helper process) |
 | `install.py` / `install.cmd` | Installation and shortcuts |
+| `tools/make_icon.py` | Redraws the app icon (`assets/claude-usage.ico`; needs Pillow, for development) |
 | `uninstall.cmd` | Full removal |
 | `tests/` | Offline regression tests |
 

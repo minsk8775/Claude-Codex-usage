@@ -2211,7 +2211,7 @@ def run_watcher():
 # itself only when it holds nothing else; otherwise it deletes just these, so a
 # copy dropped straight into e.g. Downloads never takes the user's files along.
 APP_FILES = (
-    ".git", ".github", ".gitignore", ".noupdate", "__pycache__", "assets", "tests",
+    ".git", ".github", ".gitignore", ".noupdate", "__pycache__", "assets", "tests", "tools",
     "CHANGELOG.md", "LICENSE", "README.md", "SECURITY.md", "HISTORY.md",
     "claude_usage.pyw", "usage.py", "codex_web.py", "codex_usage.py", "title_badges.py",
     "install.py", "install.cmd", "uninstall.cmd", "cleanup-legacy.cmd",
